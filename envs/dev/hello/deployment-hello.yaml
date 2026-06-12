@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: hello
-        image: ghcr.io/betweenbits-org/bitcert/hello:latest
+        image: ghcr.io/jbyee-test-org/bitcert/hello:latest
         imagePullPolicy: Never
         ports:
         - containerPort: 8080
