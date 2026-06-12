@@ -1,0 +1,5 @@
+# 게이트2 (G8) — prod 디렉토리 변경은 승인 필수. PR 경로에서 코드오너 리뷰가 강제된다.
+# dev 는 CI 직접 커밋(게이트1 자동). 알려진 한계: GitHub 브랜치 보호는 경로 단위 직접
+# push 차단을 못 하므로, "prod 는 PR 로만" 은 협약 + CODEOWNERS 로 운영한다(G11).
+/envs/prod/ @jaybee-sths
+/envs/staging/ @jaybee-sths
