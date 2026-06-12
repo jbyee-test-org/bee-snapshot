@@ -1,0 +1,6 @@
+module: hello
+repoUrl: repos/hello
+moduleCommit: 63a0c7f479cd294968d196642a732a16c9fde445
+imageDigest: ''
+chartVersion: 0.1.0
+dependsOn: []

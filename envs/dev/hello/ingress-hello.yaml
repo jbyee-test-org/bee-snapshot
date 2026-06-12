@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hello
+spec:
+  ingressClassName: kong
+  rules:
+  - host: hello.dev.bitcert.test
+    http:
+      paths:
+      - path: /hello/v1
+        pathType: Prefix
+        backend:
+          service:
+            name: hello
+            port:
+              number: 8080

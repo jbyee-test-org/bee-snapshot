@@ -1,0 +1,13 @@
+# hello 모듈 — **논리만** (origin-free, 규칙 4). 좌표(registry·host·…)는 values-<env> 에.
+# 의도적 단순화: secrets·auth·rateLimit 없음 — 첫 모듈의 로컬 CRD 의존 0 (ESO·Kong 불요).
+metadata:
+  name: hello
+spec:
+  product: attest               # platform.yaml products[attest].namespace 로 배치
+  chart:
+    version: "0.1.0"            # bee-module pin (G6 — 모듈 pin 일원화)
+  image:
+    name: hello                 # repo = <values registry>/hello
+  dependsOn: []
+  routing:
+    - { path: /hello/v1, port: 8080 }

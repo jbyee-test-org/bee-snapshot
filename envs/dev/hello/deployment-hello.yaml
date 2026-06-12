@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello
+  labels:
+    app.kubernetes.io/name: hello
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hello
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hello
+    spec:
+      containers:
+      - name: hello
+        image: ghcr.io/betweenbits-org/bitcert/hello:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
