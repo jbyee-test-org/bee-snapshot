@@ -4,7 +4,7 @@ metadata:
 spec:
   product: attest
   chart:
-    version: "0.2.0"            # bee-module pin (G6)
+    version: "0.3.0"            # bee-module pin (G6)
   image:
     name: web
   dependsOn: [hello]
@@ -13,3 +13,7 @@ spec:
   events:
     consumes:                   # hello 이벤트 구독 → chart 가 NACK durable Consumer 파생
       - { stream: HELLO, subject: hello.events }
+  db:
+    name: attest-db
+    grants:                     # cross-schema 명시 선언(G14) → chart 가 R__grants.sql 파생
+      - { schema: attest, access: read }

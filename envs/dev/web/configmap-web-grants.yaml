@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-grants
+  namespace: bitcert-attest
+data:
+  R__grants.sql: 'DO $do$ BEGIN CREATE ROLE "bee_web"; EXCEPTION WHEN duplicate_object
+    THEN NULL; END $do$;
+
+    GRANT USAGE ON SCHEMA attest TO "bee_web";
+
+    GRANT SELECT ON ALL TABLES IN SCHEMA attest TO "bee_web";
+
+    ALTER DEFAULT PRIVILEGES IN SCHEMA attest GRANT SELECT ON TABLES TO "bee_web";
+
+    '
