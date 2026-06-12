@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    app.kubernetes.io/name: web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: web
+    spec:
+      containers:
+      - name: web
+        image: ghcr.io/jbyee-test-org/bitcert/web@sha256:6fbe63f977f3a52f301df2d71d67691d08204f0ced6f11cd27965ce36d06f53e
+        ports:
+        - containerPort: 8080

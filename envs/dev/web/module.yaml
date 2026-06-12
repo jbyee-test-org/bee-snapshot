@@ -1,0 +1,12 @@
+# web 모듈 — 논리만(origin-free, 규칙 4). hello 의존 → 서브그래프·backdrop 실증(규칙 6·7).
+metadata:
+  name: web
+spec:
+  product: attest
+  chart:
+    version: "0.1.0"            # bee-module pin (G6)
+  image:
+    name: web
+  dependsOn: [hello]
+  routing:
+    - { path: /web/v1, port: 8080 }

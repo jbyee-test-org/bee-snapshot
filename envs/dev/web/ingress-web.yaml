@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web
+spec:
+  ingressClassName: kong
+  rules:
+  - host: web.dev.bitcert.test
+    http:
+      paths:
+      - path: /web/v1
+        pathType: Prefix
+        backend:
+          service:
+            name: web
+            port:
+              number: 8080
