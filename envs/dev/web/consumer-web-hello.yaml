@@ -1,0 +1,11 @@
+apiVersion: jetstream.nats.io/v1beta2
+kind: Consumer
+metadata:
+  name: web-hello
+  namespace: bitcert-attest
+spec:
+  streamName: HELLO
+  durableName: web
+  filterSubject: hello.events
+  deliverPolicy: all
+  ackPolicy: explicit

@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: web
+  namespace: bitcert-attest
   labels:
     app.kubernetes.io/name: web
 spec:
@@ -16,6 +17,6 @@ spec:
     spec:
       containers:
       - name: web
-        image: ghcr.io/jbyee-test-org/bitcert/web@sha256:6fbe63f977f3a52f301df2d71d67691d08204f0ced6f11cd27965ce36d06f53e
+        image: ghcr.io/jbyee-test-org/bitcert/web@sha256:f59ab297e22c89794ec8d90bc3622c88466383e38c8f7b7cec1ab676f7c18926
         ports:
         - containerPort: 8080

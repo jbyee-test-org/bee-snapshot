@@ -4,9 +4,12 @@ metadata:
 spec:
   product: attest
   chart:
-    version: "0.1.0"            # bee-module pin (G6)
+    version: "0.2.0"            # bee-module pin (G6)
   image:
     name: web
   dependsOn: [hello]
   routing:
     - { path: /web/v1, port: 8080 }
+  events:
+    consumes:                   # hello 이벤트 구독 → chart 가 NACK durable Consumer 파생
+      - { stream: HELLO, subject: hello.events }
