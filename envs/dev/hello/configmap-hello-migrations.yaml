@@ -6,5 +6,9 @@ data:
     \ (msg) VALUES ('hello from flyway') ON CONFLICT DO NOTHING;\n"
 kind: ConfigMap
 metadata:
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: '-1'
   name: hello-migrations
   namespace: bitcert-attest
