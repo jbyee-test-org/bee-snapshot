@@ -16,7 +16,6 @@ spec:
     spec:
       containers:
       - name: hello
-        image: ghcr.io/jbyee-test-org/bitcert/hello:latest
-        imagePullPolicy: Never
+        image: ghcr.io/jbyee-test-org/bitcert/hello@sha256:6a0ad38dd9180a55ad4f40f0a7813a9c49471e17d2f0a612eb5bd266ba9bdd2b
         ports:
         - containerPort: 8080
