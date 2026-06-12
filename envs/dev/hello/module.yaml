@@ -4,7 +4,7 @@ metadata:
 spec:
   product: attest               # platform.yaml products[attest].namespace 로 배치
   chart:
-    version: "0.2.0"            # bee-module pin (G6) — 0.2.0: namespace 렌더 + events 어휘
+    version: "0.3.0"            # bee-module pin (G6)
   image:
     name: hello                 # repo = <values registry>/hello
   dependsOn: []
@@ -13,3 +13,6 @@ spec:
   events:
     publishes:                  # 발행자가 스트림 소유(POC B안) → chart 가 NACK Stream 파생
       - { stream: HELLO, subject: hello.events }
+  db:
+    name: attest-db             # (kind,name) 공유 그룹(B안) — 같은 name = 한 인스턴스
+    migrations: db/migration    # V<weight>.<seq>__*.sql — 모듈별 Flyway Job(G14③)

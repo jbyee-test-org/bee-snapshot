@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hello-migrate
+  namespace: bitcert-attest
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: flyway
+        image: flyway/flyway:10-alpine
+        args:
+        - -url=jdbc:postgresql://postgres.bee-substrate.svc.cluster.local:5432/bee
+        - -user=bee
+        - -password=bee-demo
+        - -connectRetries=30
+        - -table=flyway_history_hello
+        - -locations=filesystem:/sql
+        - -baselineOnMigrate=true
+        - migrate
+        volumeMounts:
+        - name: sql
+          mountPath: /sql
+      volumes:
+      - name: sql
+        configMap:
+          name: hello-migrations

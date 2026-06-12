@@ -1,0 +1,10 @@
+apiVersion: v1
+data:
+  V100.1__attest_schema.sql: "-- attest schema (B안 — product 소유) + 데모 테이블. forward-only\
+    \ (구 D10).\nCREATE SCHEMA IF NOT EXISTS attest;\nCREATE TABLE IF NOT EXISTS attest.greetings\
+    \ (\n  id   serial PRIMARY KEY,\n  msg  text NOT NULL\n);\nINSERT INTO attest.greetings\
+    \ (msg) VALUES ('hello from flyway') ON CONFLICT DO NOTHING;\n"
+kind: ConfigMap
+metadata:
+  name: hello-migrations
+  namespace: bitcert-attest
