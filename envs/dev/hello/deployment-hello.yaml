@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: hello
+  namespace: bitcert-attest
   labels:
     app.kubernetes.io/name: hello
 spec:
@@ -16,6 +17,6 @@ spec:
     spec:
       containers:
       - name: hello
-        image: ghcr.io/jbyee-test-org/bitcert/hello@sha256:6a0ad38dd9180a55ad4f40f0a7813a9c49471e17d2f0a612eb5bd266ba9bdd2b
+        image: ghcr.io/jbyee-test-org/bitcert/hello@sha256:003e973cd9297ad3f455e4716f159a03ccbd790b6972e81211554a8403e3dd55
         ports:
         - containerPort: 8080

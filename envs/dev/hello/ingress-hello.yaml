@@ -2,6 +2,9 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: hello
+  namespace: bitcert-attest
+  annotations:
+    konghq.com/plugins: hello-ratelimit-0
 spec:
   ingressClassName: kong
   rules:
