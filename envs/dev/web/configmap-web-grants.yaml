@@ -4,7 +4,7 @@ metadata:
   name: web-grants
   namespace: bitcert-attest
   annotations:
-    argocd.argoproj.io/sync-wave: '0'
+    argocd.argoproj.io/sync-wave: '-200'
 data:
   R__grants.sql: 'DO $do$ BEGIN CREATE ROLE "bee_web"; EXCEPTION WHEN duplicate_object
     THEN NULL; END $do$;
