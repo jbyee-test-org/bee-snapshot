@@ -4,7 +4,7 @@ metadata:
 spec:
   product: attest               # platform.yaml products[attest].namespace 로 배치
   chart:
-    version: "0.3.0"            # bee-module pin (G6)
+    version: "0.4.0"            # bee-module pin (G6)
   image:
     name: hello                 # repo = <values registry>/hello
   dependsOn: []
@@ -15,4 +15,5 @@ spec:
       - { stream: HELLO, subject: hello.events }
   db:
     name: attest-db             # (kind,name) 공유 그룹(B안) — 같은 name = 한 인스턴스
+    schema: attest              # 이 모듈이 소유(migrations 가 생성) — grant 불변식의 owner 마커(G18①)
     migrations: db/migration    # V<weight>.<seq>__*.sql — 모듈별 Flyway Job(G14③)

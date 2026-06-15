@@ -1,8 +1,11 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: hello-migrate
+  name: hello-migrate-136bc95eb717
   namespace: bitcert-attest
+  labels:
+    bee.dev/module: hello
+    bee.dev/mighash: 136bc95eb717
   annotations:
     argocd.argoproj.io/sync-wave: '-100'
 spec:
