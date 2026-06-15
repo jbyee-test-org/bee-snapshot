@@ -3,6 +3,8 @@ kind: Deployment
 metadata:
   name: hello
   namespace: bitcert-attest
+  annotations:
+    argocd.argoproj.io/sync-wave: '2'
   labels:
     app.kubernetes.io/name: hello
 spec:
@@ -17,6 +19,6 @@ spec:
     spec:
       containers:
       - name: hello
-        image: ghcr.io/jbyee-test-org/bitcert/hello@sha256:d9d41eb3947fc336582373196b5044545d595f2520a9f38a12964f0ce016e1b6
+        image: ghcr.io/jbyee-test-org/bitcert/hello@sha256:42c8032e930ded1383834e5583daf9872cf8bfcd0f2ca8b9f26c8ead5ece6784
         ports:
         - containerPort: 8080
