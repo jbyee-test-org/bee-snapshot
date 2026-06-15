@@ -1,7 +1,7 @@
 module: web
 repoUrl: https://github.com/jbyee-test-org/web
 moduleCommit: 8722475c409b763df5f8630c7d76b65fd55be117
-imageDigest: sha256:0cc7641cfb3bcce428d3bff81bc9b5c046d24223c8af3a8c69c56f49e440a56c
+imageDigest: sha256:7cf40d2dc82cbbf0850ffd7357b20c62921ce4b72c9c8e037da6bbd1276d4ae4
 chartVersion: 0.3.0
 dependsOn:
 - hello
