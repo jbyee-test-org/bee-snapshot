@@ -1,6 +1,6 @@
 module: hello
 repoUrl: https://github.com/jbyee-test-org/hello
 moduleCommit: 9bb7203a17428c864e89a4f9704fa402a753f0a4
-imageDigest: sha256:571b0163b71a0d8c8fa61881398d3503af573333f27a3f295b7523afaa0b31e6
+imageDigest: sha256:58c49ad878618d3556d1f8d7cac46b15501a43c0f153475f4c7db941012aa362
 chartVersion: 0.3.0
 dependsOn: []
