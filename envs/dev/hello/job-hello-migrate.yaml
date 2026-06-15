@@ -5,7 +5,6 @@ metadata:
   namespace: bitcert-attest
   annotations:
     argocd.argoproj.io/sync-wave: '1'
-    argocd.argoproj.io/sync-options: Force=true,Replace=true
 spec:
   backoffLimit: 6
   template:
