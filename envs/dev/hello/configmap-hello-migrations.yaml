@@ -7,6 +7,6 @@ data:
 kind: ConfigMap
 metadata:
   annotations:
-    argocd.argoproj.io/sync-wave: '0'
+    argocd.argoproj.io/sync-wave: '-200'
   name: hello-migrations
   namespace: bitcert-attest
