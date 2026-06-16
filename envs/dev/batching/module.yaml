@@ -6,7 +6,7 @@ metadata:
 spec:
   product: attest
   chart:
-    version: "0.5.3"             # bee-module pin (G6) — 0.5.3 Replace=true(G32 finding b)
+    version: "0.5.2"             # bee-module pin (G6) — 0.5.3 revert(Replace=true Job sync 버그, 엔진 픽스 대기)
   image:
     name: batching             # 내부 worker(no ingress) — workload 는 있음(Deployment 렌더)
   dependsOn: [ingestion]        # merkle_proofs→attestations FK + 0003 이 attestations ALTER →
