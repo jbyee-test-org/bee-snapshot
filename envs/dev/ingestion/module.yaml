@@ -6,7 +6,7 @@ metadata:
 spec:
   product: attest               # platform.yaml products[attest].namespace=bitcert-attest 로 배치
   chart:
-    version: "0.5.2"           # bee-module pin (G6) — 로컬 chart 실버전 정렬
+    version: "0.5.3"           # bee-module pin (G6) — 0.5.3 Replace=true(G32 finding b)
   image:
     name: ingestion            # 실 서비스(workload) — Stage 2 에서 Rust 빌드
   dependsOn: [stubs]            # out-of-slice FK(exchanges·audit_firms·storage_pointers, G24 #5) →
