@@ -1,13 +1,14 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: anchoring-migrate-a9dd067861c6
+  name: anchoring-migrate-bfd269a1b7dd
   namespace: bitcert-attest
   labels:
     bee.dev/module: anchoring
-    bee.dev/mighash: a9dd067861c6
+    bee.dev/mighash: bfd269a1b7dd
   annotations:
     argocd.argoproj.io/sync-wave: '-97'
+    argocd.argoproj.io/sync-options: Replace=true
 spec:
   backoffLimit: 6
   template:
