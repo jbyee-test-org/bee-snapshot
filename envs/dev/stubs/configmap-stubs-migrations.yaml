@@ -1,0 +1,31 @@
+apiVersion: v1
+data:
+  V90.1__out_of_slice_stubs.sql: "-- slice-stubs: attest 슬라이스 out-of-slice FK 타겟 최소\
+    \ 스텁(#5). forward-only·idempotent.\n-- public 에 생성 — 슬라이스 마이그레이션(search_path =\
+    \ attest, public)이 unqualified FK 를 해석.\n-- 실 시스템: identity(exchanges·audit_firms)·storage(storage_pointers)\
+    \ 모듈 + identity/0001 의 트리거.\n-- 실 마이그레이션에선 이 스텁이 진짜 모듈 + dependsOn 으로 교체(depth-wave\
+    \ 가 순서 보장).\n\nCREATE TABLE IF NOT EXISTS exchanges        (id UUID PRIMARY KEY);\n\
+    CREATE TABLE IF NOT EXISTS audit_firms      (id UUID PRIMARY KEY);\nCREATE TABLE\
+    \ IF NOT EXISTS storage_pointers (id UUID PRIMARY KEY);\n\n-- 공유 트리거 함수(실: identity/0001)\
+    \ — anchoring anchor_txs 가 BEFORE UPDATE 로 사용.\nCREATE OR REPLACE FUNCTION set_updated_at()\
+    \ RETURNS trigger AS $$\nBEGIN\n  NEW.updated_at = NOW();\n  RETURN NEW;\nEND;\n\
+    $$ LANGUAGE plpgsql;\n\n-- dev 테넌트 행(Level 2 ingest 용 — 고정 UUID, ingestion env\
+    \ Secret 과 일치시킬 값).\nINSERT INTO exchanges   (id) VALUES ('00000000-0000-0000-0000-000000000001')\
+    \ ON CONFLICT DO NOTHING;\nINSERT INTO audit_firms (id) VALUES ('00000000-0000-0000-0000-000000000002')\
+    \ ON CONFLICT DO NOTHING;\n"
+  V90.2__role_search_path.sql: '-- finding #6: 서비스가 unqualified 테이블명(search_path 가정)인데
+    bee 는 attest 스키마에 마이그레이션(#2).
+
+    -- bee 역할 기본 search_path = attest,public → 서비스 커넥션이 attest.* 를 unqualified 로 해석.
+
+    -- (per-service DB URL `?options=-c search_path=attest` 가 더 깔끔한 대안 — 후속.) idempotent·forward-only.
+
+    ALTER ROLE bee SET search_path TO attest, public;
+
+    '
+kind: ConfigMap
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: '-200'
+  name: stubs-migrations
+  namespace: bitcert-attest

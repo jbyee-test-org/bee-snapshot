@@ -1,0 +1,15 @@
+# stubs — attest 슬라이스의 **out-of-slice FK 타겟 최소 스텁**(#5 해소). 워크로드 없음(G21 스타일).
+# 실 시스템의 identity(exchanges·audit_firms)·storage(storage_pointers) 모듈 + 공유 set_updated_at()
+# 트리거의 *대역*. 슬라이스 경계 밖을 최소 스텁으로 메워 마이그레이션이 닫히게 한다 —
+# 실 배포에선 진짜 identity/storage 모듈이 대체(이건 인너루프 슬라이스 검증용).
+metadata:
+  name: stubs
+spec:
+  product: attest               # 같은 namespace(bitcert-attest)·DB(attest-db)
+  chart:
+    version: "0.5.2"
+  # image 없음 → Deployment skip(G21). 마이그레이션만 소유.
+  dependsOn: []                 # 슬라이스 root(depth 0, wave -100) — ingestion 보다 먼저 migrate
+  db:
+    name: attest-db
+    migrations: db/migration    # V90.* — 스텁 테이블 + set_updated_at(). schema/grant 없음(public)
