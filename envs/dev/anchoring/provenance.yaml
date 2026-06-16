@@ -1,7 +1,7 @@
 module: anchoring
 repoUrl: https://github.com/jbyee-test-org/anchoring
-moduleCommit: 7da5a91fe47bae6abf6b4d384302f1443d059dc1
+moduleCommit: 427d85e039a1ef1ca9ed8d37170f2419378b0305
 imageDigest: sha256:0f2335d1b402b8b0dd0f922dc382951d4591639c95b3cffc52ada1389f9d7d36
-chartVersion: 0.5.2
+chartVersion: 0.5.4
 dependsOn:
 - batching
