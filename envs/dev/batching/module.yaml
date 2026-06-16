@@ -1,0 +1,25 @@
+# batching 모듈 — bitcert-attest 실 슬라이스(attest 체인 2/3). 논리만(origin-free, 규칙 4).
+# 키스톤(G24): attest 의 **또 다른 co-owner** — batches·merkle_proofs 생성 + attestations ALTER(0003 link).
+# routing 없음 — manifest 에 batching route 부재(내부 worker). Service/Ingress 미렌더(routing nil).
+metadata:
+  name: batching
+spec:
+  product: attest
+  chart:
+    version: "0.5.2"
+  image:
+    name: batching             # 내부 worker(no ingress) — workload 는 있음(Deployment 렌더)
+  dependsOn: [ingestion]        # merkle_proofs→attestations FK + 0003 이 attestations ALTER →
+                                #   ingestion 먼저 migrate(depth-wave -99 < ingestion -100). 키스톤 순서.
+  # events 선언 없음(G25): attest.batch.created 는 **런타임 publish** — NATS 는 발행에 선언 불요.
+  # 공유 stream(ANN_BITCERT_ATTEST_EVENTS, owner=ingestion 의 attest.> 와일드카드)이 포착하므로
+  # 여기서 Stream CR 을 만들면 ArgoCD 동명 중복 = sync 에러. publish 계약 정합 검증은 P1 CI lint(향후).
+  db:
+    name: attest-db
+    schema: attest              # co-owner — ingestion 과 같은 schema 에 자기 테이블(다중-owner)
+    migrations: db/migration    # V115.* — batches, merkle_proofs, link_ingestion(cross-module ALTER)
+  secrets:                      # 계약(G27) — 인너=secrets.local.yaml(bee apply)·아웃터=ESO. worker(no tenant).
+    - { group: db,   property: BITCERT_DATABASE_URL }
+    - { group: nats, property: BITCERT_NATS_URL }
+    - { group: net,  property: BITCERT_PORT }
+    - { group: nats, property: BITCERT_NATS_STREAM }

@@ -1,0 +1,169 @@
+apiVersion: v1
+data:
+  V115.1__batches.sql: "-- =============================================================================\n\
+    -- 0001_batches.up.sql  —  BitCert Batching Domain · Merkle Batches\n-- =============================================================================\n\
+    --\n-- Owner service (writes): services/batching  (Phase 2 Real; Stub in Phase\
+    \ 1)\n-- Readers:                services/anchoring (picks status='sealed' batches\
+    \ to\n--                         commit-reveal on Bitcoin), services/verification\n\
+    --                         (rebuilds Merkle root from leaves + proofs),\n--  \
+    \                       services/reporting, apps/portal-web.\n--\n-- Helm hook\
+    \ weight: 15  (runs AFTER ingestion (10) so the batching/0003 link\n--       \
+    \                 file can ALTER attestations; BEFORE anchoring (20)\n--     \
+    \                   since anchoring.anchor_txs.batch_id -> batches(id).)\n--\n\
+    -- =============================================================================\n\
+    -- DELIBERATE DEPARTURE FROM CLAUDE.md TENANT-FK RULE — READ THIS\n-- =============================================================================\n\
+    -- The standing hard-constraint is \"every product-domain table carries a\n--\
+    \ tenant FK (exchange_id or audit_firm_id) NOT NULL + indexed\". `batches`\n--\
+    \ INTENTIONALLY HAS NO TENANT COLUMN.\n--\n-- Rationale:\n--   * A Merkle batch\
+    \ aggregates attestations from MULTIPLE exchanges into\n--     ONE on-chain anchor.\
+    \ This is the core fee-amortisation feature of the\n--     platform — one commit-reveal\
+    \ pair on Bitcoin L1 carries attestations\n--     from ~10-500 tenants, turning\
+    \ a per-tenant anchor cost of $50-200\n--     into a fraction of that per tenant.\n\
+    --   * Forcing a single tenant dimension on batches would either (a) break\n--\
+    \     cross-tenant batching and destroy the cost model, or (b) require a\n-- \
+    \    synthetic \"platform\" tenant which defeats the safety intent of the\n--\
+    \     rule.\n--\n-- How tenant isolation is preserved end-to-end:\n--   * attestations.exchange_id\
+    \ is the canonical tenant key and IS NOT NULL\n--     + FK + indexed (ingestion/0001).\n\
+    --   * merkle_proofs.attestation_id -> attestations(id) — tenant reachable\n--\
+    \     via the join. Row-level tenant filter in reporting/verification uses\n--\
+    \     `attestations.exchange_id = $1` with a JOIN through merkle_proofs /\n--\
+    \     batches, not a direct batches.exchange_id column.\n--   * Any \"list my\
+    \ batches\" endpoint must SELECT DISTINCT batches.id FROM\n--     batches JOIN\
+    \ attestations ... WHERE attestations.exchange_id = $1 —\n--     which is what\
+    \ services/reporting does.\n--\n-- Documented in ingestion/README.md §4 and deploy/migrations/README.md\
+    \ §1\n-- as well as the session log at\n-- docs/session-log/2026-04-21-product-migrations.md.\n\
+    -- =============================================================================\n\
+    --\n-- Primary key:\n--   id BYTEA with CHECK octet_length = 16. This is UUIDv7\
+    \ raw bytes, matching\n--   vc_models::BatchId. Application code (services/batching)\
+    \ generates the\n--   UUIDv7 via the vc-models crate; the DB does NOT default\
+    \ this PK. We\n--   deliberately do NOT use UUID here so the column type matches\
+    \ the on-wire\n--   batch id exactly.\n-- =============================================================================\n\
+    \nBEGIN;\n\n-- bee 포트(G24 압력#2 해소): manifest schemas:[attest] 실현 — 실 SQL 은 public\
+    \ 가정,\n-- bee 는 attest 로 안착(search_path). DDL 본문은 verbatim(압력 보존). 차트 변경 0.\n\
+    CREATE SCHEMA IF NOT EXISTS attest;\nSET search_path TO attest, public;\n\nCREATE\
+    \ TABLE IF NOT EXISTS batches (\n  id            BYTEA        PRIMARY KEY,\n \
+    \ merkle_root   BYTEA        NOT NULL,\n  leaf_count    INT          NOT NULL,\n\
+    \  status        TEXT         NOT NULL DEFAULT 'assembling',\n  sealed_at    \
+    \ TIMESTAMPTZ,\n  created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),\n\n  -- 16-byte\
+    \ UUIDv7 raw bytes, matches vc_models::BatchId. Application-\n  -- generated (no\
+    \ DB default — see header).\n  CONSTRAINT batches_id_length_chk\n    CHECK (octet_length(id)\
+    \ = 16),\n\n  -- Merkle root is SHA-256 = 32 bytes.\n  CONSTRAINT batches_merkle_root_length_chk\n\
+    \    CHECK (octet_length(merkle_root) = 32),\n\n  -- Non-empty batch.\n  CONSTRAINT\
+    \ batches_leaf_count_positive_chk\n    CHECK (leaf_count > 0),\n\n  -- Status\
+    \ lifecycle:\n  --   assembling -> sealed -> anchoring -> confirmed\n  --    \
+    \                          \\->       failed\n  -- `failed` is terminal; re-anchor\
+    \ requires a new batch id.\n  CONSTRAINT batches_status_chk\n    CHECK (status\
+    \ IN ('assembling', 'sealed', 'anchoring', 'confirmed', 'failed')),\n\n  -- sealed_at\
+    \ set iff status has passed 'assembling'.\n  CONSTRAINT batches_sealed_consistency_chk\n\
+    \    CHECK (\n      (status IN ('sealed', 'anchoring', 'confirmed', 'failed')\
+    \ AND sealed_at IS NOT NULL)\n      OR status = 'assembling'\n    )\n);\n\n--\
+    \ Indexes -------------------------------------------------------------------\n\
+    -- Anchoring worker queue: \"sealed batches ready for commit-reveal\" plus\n--\
+    \ \"failed\" for retry runbook.\nCREATE INDEX IF NOT EXISTS batches_worker_queue_idx\n\
+    \  ON batches (status) WHERE status IN ('assembling', 'sealed', 'anchoring', 'failed');\n\
+    \n-- Reporting / admin listing.\nCREATE INDEX IF NOT EXISTS batches_created_idx\n\
+    \  ON batches (created_at DESC);\n\nCOMMENT ON TABLE batches IS\n  'Merkle batches\
+    \ aggregating attestations across tenants for amortised '\n  'Bitcoin L1 anchoring.\
+    \ INTENTIONALLY tenant-agnostic — tenant dimension '\n  'lives on attestations.exchange_id\
+    \ (join via merkle_proofs.attestation_id). '\n  'See header comment of this migration\
+    \ for rationale.';\nCOMMENT ON COLUMN batches.id IS\n  'UUIDv7 raw bytes (16B),\
+    \ matches vc_models::BatchId wire form. '\n  'APPLICATION-GENERATED by services/batching\
+    \ — no DB default.';\nCOMMENT ON COLUMN batches.merkle_root IS\n  'SHA-256 Merkle\
+    \ root over leaves in canonical order. Committed on-chain '\n  'inside the OP_RETURN\
+    \ v30 envelope at anchor time. 32 bytes.';\n\nCOMMIT;\n"
+  V115.2__merkle_proofs.sql: "-- =============================================================================\n\
+    -- 0002_merkle_proofs.up.sql  —  BitCert Batching Domain · Merkle Inclusion Proofs\n\
+    -- =============================================================================\n\
+    --\n-- Owner service (writes): services/batching\n-- Readers:                services/verification\
+    \ (stateless inclusion check),\n--                         services/reporting,\
+    \ apps/portal-web.\n--\n-- One row per (batch, attestation). Stores the sibling-hash\
+    \ path and\n-- direction markers needed to rebuild the Merkle root from a single\
+    \ leaf.\n--\n-- vc-models / merkle-batching crate mapping:\n--   sibling_path\
+    \ : hex-encoded 32-byte strings   -> merkle_batching::MerkleProof::siblings\n\
+    --   directions   : array of \"left\" | \"right\"     -> merkle_batching::Direction\n\
+    --\n-- Encoding choice (JSONB over BYTEA[]):\n--   * JSONB gives us jsonb_array_length()\
+    \ as a CHECK subject and makes\n--     introspection queries trivial from psql.\n\
+    --   * Phase 1 volumes: 500 proofs per batch * 20-32 siblings each * 32 bytes\n\
+    --     = ~320 KB per batch — immaterial vs. a BYTEA[] which would save\n--   \
+    \  perhaps 10-20% space at the cost of readability and CHECK-ability.\n--\n--\
+    \ Invariants:\n--   * jsonb_array_length(sibling_path) = jsonb_array_length(directions)\n\
+    --     — Merkle proof length and direction length must match (from\n--     merkle_batching::MerkleProof\
+    \ construction).\n--   * PRIMARY KEY (batch_id, attestation_id) — one proof per\
+    \ leaf per batch.\n--     Prevents duplicate proofs and guards against webhook\
+    \ replays.\n-- =============================================================================\n\
+    \nBEGIN;\n\n-- bee 포트(G24 압력#2 해소): manifest schemas:[attest] 실현 — 실 SQL 은 public\
+    \ 가정,\n-- bee 는 attest 로 안착(search_path). DDL 본문은 verbatim(압력 보존). 차트 변경 0.\n\
+    CREATE SCHEMA IF NOT EXISTS attest;\nSET search_path TO attest, public;\n\nCREATE\
+    \ TABLE IF NOT EXISTS merkle_proofs (\n  attestation_id   UUID         NOT NULL\
+    \ REFERENCES attestations(id) ON DELETE CASCADE,\n  batch_id         BYTEA   \
+    \     NOT NULL REFERENCES batches(id),\n  leaf_index       INTEGER      NOT NULL,\n\
+    \  sibling_path     JSONB        NOT NULL,\n  directions       JSONB        NOT\
+    \ NULL,\n  created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),\n\n  -- Composite\
+    \ PK: one proof per leaf per batch.\n  PRIMARY KEY (batch_id, attestation_id),\n\
+    \n  -- batch_id is UUIDv7 raw bytes, same shape as batches(id).\n  CONSTRAINT\
+    \ merkle_proofs_batch_id_length_chk\n    CHECK (octet_length(batch_id) = 16),\n\
+    \n  -- Leaf index is a 0-based position in the Merkle tree's leaf array.\n  CONSTRAINT\
+    \ merkle_proofs_leaf_index_nonneg_chk\n    CHECK (leaf_index >= 0),\n\n  -- Merkle\
+    \ invariant: sibling_path and directions have the same length.\n  -- Matches merkle_batching::MerkleProof\
+    \ where each step contributes one\n  -- sibling hash and one direction marker.\n\
+    \  CONSTRAINT merkle_proofs_path_direction_length_match_chk\n    CHECK (jsonb_array_length(sibling_path)\
+    \ = jsonb_array_length(directions)),\n\n  -- sibling_path must be a JSON array.\n\
+    \  CONSTRAINT merkle_proofs_sibling_path_is_array_chk\n    CHECK (jsonb_typeof(sibling_path)\
+    \ = 'array'),\n\n  -- directions must be a JSON array.\n  CONSTRAINT merkle_proofs_directions_is_array_chk\n\
+    \    CHECK (jsonb_typeof(directions) = 'array')\n);\n\n-- Index -------------------------------------------------------------------\n\
+    -- \"Give me the proof for attestation X\" (no batch id required up front —\n\
+    -- useful for verification endpoints that start from an attestation).\nCREATE\
+    \ INDEX IF NOT EXISTS merkle_proofs_attestation_idx\n  ON merkle_proofs (attestation_id);\n\
+    \nCOMMENT ON TABLE merkle_proofs IS\n  'Per-attestation Merkle inclusion proofs\
+    \ within a batch. Stateless '\n  'verification reconstructs the root from (leaf,\
+    \ sibling_path, directions). '\n  'Owner: services/batching. Read-heavy; appended\
+    \ once per leaf at batch seal.';\nCOMMENT ON COLUMN merkle_proofs.sibling_path\
+    \ IS\n  'JSON array of hex-encoded 32-byte sibling hashes, bottom-up, matching\
+    \ '\n  'merkle_batching::MerkleProof::siblings. Length equals tree depth for the\
+    \ '\n  'leaf position.';\nCOMMENT ON COLUMN merkle_proofs.directions IS\n  'JSON\
+    \ array of \"left\" | \"right\" strings matching merkle_batching::Direction, '\n\
+    \  'parallel to sibling_path. Specifies on which side each sibling concatenates\
+    \ '\n  'during root reconstruction.';\nCOMMENT ON COLUMN merkle_proofs.leaf_index\
+    \ IS\n  '0-based position of the leaf in the canonical leaf order used to build\
+    \ '\n  'the tree. Stored for auditability; not strictly required for verification\
+    \ '\n  'since directions encode the path already.';\n\nCOMMIT;\n"
+  V115.3__link_ingestion.sql: "-- =============================================================================\n\
+    -- 0003_link_ingestion.up.sql\n--   Connect ingestion (attestations) to batching\
+    \ (batches) via deferred FK.\n-- =============================================================================\n\
+    --\n-- Why this lives here, not in ingestion/:\n--   ingestion runs at Helm hook\
+    \ weight 10, batching at 15. Declaring a FK\n--   from attestations.batch_id ->\
+    \ batches(id) inside ingestion would break\n--   the standalone property of the\
+    \ ingestion directory (it could not run\n--   before batches exists). Same rationale\
+    \ as audit-firm/0003 and\n--   exchange/0002 for the identity links.\n--\n-- Pattern:\
+    \ ADD CONSTRAINT ... NOT VALID, then VALIDATE CONSTRAINT.\n--   Postgres best\
+    \ practice — NOT VALID takes a fast SHARE UPDATE EXCLUSIVE\n--   lock; VALIDATE\
+    \ CONSTRAINT takes only ROW SHARE (concurrent reads OK).\n--   On Phase 1 (empty\
+    \ tables) both steps are instant; the pattern is kept\n--   for Phase 2 consistency.\n\
+    --\n-- ON DELETE behaviour:\n--   ON DELETE SET NULL — deleting a batch leaves\
+    \ the attestation rows\n--   intact with batch_id = NULL, reverting their status\
+    \ relationship.\n--   This matches the audit-trail intent (attestation rows are\
+    \ evidence;\n--   they should survive a batch being purged for any operational\
+    \ reason).\n--\n-- Down path: drop ONLY the constraint added here. Never touch\
+    \ attestations\n-- columns (ingestion owns them). Mirrors audit-firm/0003 down\
+    \ symmetry.\n-- =============================================================================\n\
+    \n-- Idempotency: see audit-firm/0003 — runner has no tracking table, so the\n\
+    -- ADD is guarded by a pg_constraint existence check. VALIDATE is a no-op\n--\
+    \ when already validated.\n\nBEGIN;\n\n-- bee 포트(G24 압력#2 해소): manifest schemas:[attest]\
+    \ 실현 — 실 SQL 은 public 가정,\n-- bee 는 attest 로 안착(search_path). DDL 본문은 verbatim(압력\
+    \ 보존). 차트 변경 0.\nCREATE SCHEMA IF NOT EXISTS attest;\nSET search_path TO attest,\
+    \ public;\n\n-- attestations.batch_id -> batches(id) --------------------------------------\n\
+    DO $$\nBEGIN\n  IF NOT EXISTS (\n    SELECT 1 FROM pg_constraint\n    WHERE conname\
+    \ = 'attestations_batch_fk'\n      AND conrelid = 'attestations'::regclass\n \
+    \ ) THEN\n    ALTER TABLE attestations\n      ADD CONSTRAINT attestations_batch_fk\n\
+    \      FOREIGN KEY (batch_id) REFERENCES batches(id)\n      ON DELETE SET NULL\n\
+    \      NOT VALID;\n  END IF;\nEND $$;\n\nALTER TABLE attestations VALIDATE CONSTRAINT\
+    \ attestations_batch_fk;\n\nCOMMENT ON CONSTRAINT attestations_batch_fk ON attestations\
+    \ IS\n  'Added by batching/0003. ON DELETE SET NULL preserves attestation audit\
+    \ '\n  'trail if a batch is purged. batch_id shape (BYTEA(16)) already CHECKed\
+    \ '\n  'in ingestion/0001.';\n\nCOMMIT;\n"
+kind: ConfigMap
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: '-200'
+  name: batching-migrations
+  namespace: bitcert-attest

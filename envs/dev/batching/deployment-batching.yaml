@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: batching
+  namespace: bitcert-attest
+  labels:
+    app.kubernetes.io/name: batching
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: batching
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: batching
+    spec:
+      containers:
+      - name: batching
+        image: ghcr.io/jbyee-test-org/bitcert/batching@sha256:7dfc9ca1d97656f6f2e71b6752c8f7592568ea72ac0c5286ce2a07beebc1b529
+        ports: null
+        envFrom:
+        - secretRef:
+            name: batching-secrets
