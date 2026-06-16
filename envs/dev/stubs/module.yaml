@@ -7,7 +7,7 @@ metadata:
 spec:
   product: attest               # 같은 namespace(bitcert-attest)·DB(attest-db)
   chart:
-    version: "0.5.3"             # bee-module pin (G6) — 0.5.3 Replace=true(G32 finding b)
+    version: "0.5.2"             # bee-module pin (G6) — 0.5.3 revert(Replace=true Job sync 버그, 엔진 픽스 대기)
   # image 없음 → Deployment skip(G21). 마이그레이션만 소유.
   dependsOn: []                 # 슬라이스 root(depth 0, wave -100) — ingestion 보다 먼저 migrate
   db:

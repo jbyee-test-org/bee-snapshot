@@ -1,14 +1,13 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: stubs-migrate-f93045d0281c
+  name: stubs-migrate-73bbaa6ed895
   namespace: bitcert-attest
   labels:
     bee.dev/module: stubs
-    bee.dev/mighash: f93045d0281c
+    bee.dev/mighash: 73bbaa6ed895
   annotations:
     argocd.argoproj.io/sync-wave: '-100'
-    argocd.argoproj.io/sync-options: Replace=true
 spec:
   backoffLimit: 6
   template:
