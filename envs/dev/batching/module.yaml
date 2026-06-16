@@ -6,7 +6,7 @@ metadata:
 spec:
   product: attest
   chart:
-    version: "0.5.2"
+    version: "0.5.3"             # bee-module pin (G6) — 0.5.3 Replace=true(G32 finding b)
   image:
     name: batching             # 내부 worker(no ingress) — workload 는 있음(Deployment 렌더)
   dependsOn: [ingestion]        # merkle_proofs→attestations FK + 0003 이 attestations ALTER →
