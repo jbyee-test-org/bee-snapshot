@@ -1,0 +1,217 @@
+apiVersion: v1
+data:
+  V110.1__attestations.sql: "-- =============================================================================\n\
+    -- 0001_attestations.up.sql  —  BitCert Ingestion Domain · Attestations\n-- =============================================================================\n\
+    --\n-- Owner service (writes): services/ingestion  (Phase 2 Real; Stub in Phase\
+    \ 1)\n-- Readers:                services/profile (jurisdiction checks),\n-- \
+    \                        services/batching (picks status='pending' into a\n--\
+    \                         batch), services/verification (Merkle proof\n--    \
+    \                     reconstruction), services/reporting, services/\n--     \
+    \                    notification (invites audit firm to review).\n--\n-- Helm\
+    \ hook weight: 10  (runs AFTER storage (5) so attestations.\n--              \
+    \          storage_pointer_id FK to storage_pointers(id) is\n--              \
+    \          inline; BEFORE batching (15) so batching can link\n--             \
+    \           attestations.batch_id -> batches(id) via the\n--                 \
+    \       batching/0003_link_ingestion.up.sql link file.)\n--\n-- batch_id posture:\n\
+    --   Declared here as bare BYTEA with a length CHECK (16 bytes = UUIDv7, matches\n\
+    --   vc_models::BatchId wire form). The FK constraint pointing at batches(id)\n\
+    --   is NOT declared in this file — that is added later by\n--     batching/0003_link_ingestion.up.sql\
+    \  (NOT VALID + VALIDATE CONSTRAINT)\n--   Same pattern as audit-firm/0003 and\
+    \ exchange/0002 for the identity link\n--   FKs. Keeps ingestion directory standalone\
+    \ (can run without batching).\n--\n-- Tenant isolation:\n--   exchange_id NOT\
+    \ NULL + FK + indexed. audit_firm_id NOT NULL + FK + indexed\n--   (the audit\
+    \ firm that produced and signed the attestation report).\n--\n-- Jurisdiction\
+    \ vocabulary:\n--   Matches the wire form of vc_models::Jurisdiction. Extend this\
+    \ CHECK when\n--   the enum gains a new variant — NOT transparent to the app layer.\n\
+    --\n-- Status lifecycle:\n--   pending   — just ingested, awaiting batching\n\
+    --   batched   — assigned to a batch, Merkle root not yet frozen\n--   anchored\
+    \  — batch committed & revealed on Bitcoin L1\n--   failed    — terminal error\
+    \ (malformed VC, storage miss, etc.)\n-- =============================================================================\n\
+    \nBEGIN;\n\n-- bee 포트(G24 압력#2 해소): manifest schemas:[attest] 실현 — 실 SQL 은 public\
+    \ 가정,\n-- bee 는 attest 로 안착(search_path). DDL 본문은 verbatim(압력 보존). 차트 변경 0.\n\
+    CREATE SCHEMA IF NOT EXISTS attest;\nSET search_path TO attest, public;\n\nCREATE\
+    \ TABLE IF NOT EXISTS attestations (\n  id                   UUID         PRIMARY\
+    \ KEY DEFAULT gen_random_uuid(),\n  exchange_id          UUID         NOT NULL\
+    \ REFERENCES exchanges(id),\n  audit_firm_id        UUID         NOT NULL REFERENCES\
+    \ audit_firms(id),\n  jurisdiction         TEXT         NOT NULL,\n  vc_document\
+    \          JSONB        NOT NULL,\n  report_hash          BYTEA        NOT NULL,\n\
+    \  storage_pointer_id   UUID         REFERENCES storage_pointers(id),\n\n  status\
+    \               TEXT         NOT NULL DEFAULT 'pending',\n\n  -- batch_id is BYTEA(16)\
+    \ (UUIDv7 raw bytes), matching vc_models::BatchId.\n  -- Declared as bare BYTEA\
+    \ here; FK to batches(id) is added by\n  -- batching/0003_link_ingestion.up.sql\
+    \ so ingestion remains standalone.\n  batch_id             BYTEA,\n\n  submitted_at\
+    \         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),\n  batched_at           TIMESTAMPTZ,\n\
+    \  anchored_at          TIMESTAMPTZ,\n\n  -- Jurisdiction vocabulary — must mirror\
+    \ vc_models::Jurisdiction wire form.\n  CONSTRAINT attestations_jurisdiction_chk\n\
+    \    CHECK (jurisdiction IN (\n      'KR-DABA',\n      'SG-MAS',\n      'VN-VASP',\n\
+    \      'EU-MiCA',\n      'JP-FIEA',\n      'GENERIC'\n    )),\n\n  -- Status lifecycle\
+    \ vocabulary.\n  CONSTRAINT attestations_status_chk\n    CHECK (status IN ('pending',\
+    \ 'batched', 'anchored', 'failed')),\n\n  -- SHA-256 of the audit report artifact\
+    \ — 32 bytes.\n  CONSTRAINT attestations_report_hash_length_chk\n    CHECK (octet_length(report_hash)\
+    \ = 32),\n\n  -- batch_id shape guard. Must be either NULL or exactly 16 bytes\
+    \ (UUIDv7).\n  -- The FK pointing at batches(id) is added in batching/0003.\n\
+    \  CONSTRAINT attestations_batch_id_length_chk\n    CHECK (batch_id IS NULL OR\
+    \ octet_length(batch_id) = 16),\n\n  -- Status/timestamp consistency.\n  --  \
+    \ anchored  => anchored_at  IS NOT NULL\n  --   batched   => batched_at   IS NOT\
+    \ NULL\n  -- No requirement for the reverse direction: a late backfill may set\n\
+    \  -- anchored_at without immediately flipping status, and batched_at\n  -- persists\
+    \ once set.\n  CONSTRAINT attestations_anchored_consistency_chk\n    CHECK (\n\
+    \      (status = 'anchored' AND anchored_at IS NOT NULL)\n      OR status <> 'anchored'\n\
+    \    ),\n  CONSTRAINT attestations_batched_consistency_chk\n    CHECK (\n    \
+    \  (status = 'batched' AND batched_at IS NOT NULL)\n      OR status <> 'batched'\n\
+    \    ),\n\n  -- Deduplicate identical artifacts per tenant. Prevents an ops mistake\n\
+    \  -- where the same PDF is ingested twice and billed twice.\n  CONSTRAINT attestations_exchange_report_uniq\n\
+    \    UNIQUE (exchange_id, report_hash)\n);\n\n-- Indexes -------------------------------------------------------------------\n\
+    -- Tenant listing: \"my attestations, newest first\" (portal-web).\nCREATE INDEX\
+    \ IF NOT EXISTS attestations_exchange_submitted_idx\n  ON attestations (exchange_id,\
+    \ submitted_at DESC);\n\n-- Audit-firm view: \"my firm's signed attestations\"\
+    .\nCREATE INDEX IF NOT EXISTS attestations_audit_firm_idx\n  ON attestations (audit_firm_id);\n\
+    \n-- Batching worker: \"unbatched pending/failed\" queue.\nCREATE INDEX IF NOT\
+    \ EXISTS attestations_worker_queue_idx\n  ON attestations (status) WHERE status\
+    \ IN ('pending', 'failed');\n\n-- Reverse lookup: \"give me every attestation\
+    \ in this batch\".\nCREATE INDEX IF NOT EXISTS attestations_batch_idx\n  ON attestations\
+    \ (batch_id) WHERE batch_id IS NOT NULL;\n\nCOMMENT ON TABLE attestations IS\n\
+    \  'Ingested audit attestations. One row per audit-firm-signed PoR report '\n\
+    \  'ingested into the platform. Owner: services/ingestion. '\n  'Tenant FK on\
+    \ exchange_id + audit_firm_id. batch_id FK added by '\n  'batching/0003 (NOT VALID\
+    \ + VALIDATE CONSTRAINT pattern).';\nCOMMENT ON COLUMN attestations.vc_document\
+    \ IS\n  'W3C Verifiable Credentials envelope as produced by vc-models crate. '\n\
+    \  'proof.type = \"BitcertOpReturnV30Anchor2026\" once anchored. Kept as JSONB\
+    \ '\n  'to support schema evolution without migration churn.';\nCOMMENT ON COLUMN\
+    \ attestations.report_hash IS\n  'SHA-256 of the raw audit report artifact (PDF/XBRL).\
+    \ 32 bytes. Forms half '\n  'of the UNIQUE(exchange_id, report_hash) duplicate\
+    \ guard.';\nCOMMENT ON COLUMN attestations.batch_id IS\n  'UUIDv7 raw bytes (16B),\
+    \ matches vc_models::BatchId. NULL until assigned. '\n  'FK to batches(id) added\
+    \ by batching/0003_link_ingestion.up.sql to keep '\n  'this directory standalone.';\n\
+    COMMENT ON COLUMN attestations.storage_pointer_id IS\n  'FK to storage_pointers(id).\
+    \ Nullable at ingest start; wired once the '\n  'artifact has been persisted by\
+    \ services/storage.';\n\nCOMMIT;\n"
+  V110.2__por_run_id.sql: "-- =============================================================================\n\
+    -- 0002_por_run_id.up.sql  —  Phase 1.11 Track G · BB-POR run reference\n-- =============================================================================\n\
+    --\n-- Adds a nullable bigint column `por_run_id` to `attestations`. When a\n\
+    -- jurisdiction profile sets `zk_proof_default = true` (currently only\n-- VN-VASP)\
+    \ or the exchange opts in via console-web for any other\n-- supported profile,\
+    \ ingestion accepts a `por_run_id` reference into\n-- BB-POR (`third_party/bb-por::por_runs.id`)\
+    \ instead of the inline VC\n-- payload. The vc_document column stays — services/ingestion\
+    \ stores a\n-- thin VC envelope that points at the BB-POR run for downstream verify.\n\
+    --\n-- BIGINT not UUID: BB-POR uses Go bigint auto-increment for por_runs.id,\n\
+    -- which is the SoT for ZK opt-in attestations. We mirror its native type.\n--\n\
+    -- Idempotent: ADD COLUMN IF NOT EXISTS + DO $$ ... $$ guard for the index.\n\
+    -- =============================================================================\n\
+    \nBEGIN;\n\n-- bee 포트(G24 압력#2 해소): manifest schemas:[attest] 실현 — 실 SQL 은 public\
+    \ 가정,\n-- bee 는 attest 로 안착(search_path). DDL 본문은 verbatim(압력 보존). 차트 변경 0.\n\
+    CREATE SCHEMA IF NOT EXISTS attest;\nSET search_path TO attest, public;\n\nALTER\
+    \ TABLE attestations\n  ADD COLUMN IF NOT EXISTS por_run_id BIGINT;\n\n-- Sparse\
+    \ partial index — most attestations have NULL here. Lookups are\n-- \"give me\
+    \ the attestation for this BB-POR run\" (verify path).\nDO $$\nBEGIN\n  IF NOT\
+    \ EXISTS (\n    SELECT 1 FROM pg_indexes\n    WHERE schemaname = 'public'\n  \
+    \    AND indexname  = 'attestations_por_run_idx'\n  ) THEN\n    EXECUTE 'CREATE\
+    \ INDEX attestations_por_run_idx\n             ON attestations (por_run_id)\n\
+    \             WHERE por_run_id IS NOT NULL';\n  END IF;\nEND $$;\n\nCOMMENT ON\
+    \ COLUMN attestations.por_run_id IS\n  'BB-POR por_runs.id (bigint). NOT NULL\
+    \ when this attestation was '\n  'submitted with ZK-SNARK opt-in (VN-VASP autonomous\
+    \ mode by default; '\n  'other jurisdictions opt-in via console-web). NULL for\
+    \ inline VC '\n  'attestations. Phase 1.11 Track G.';\n\nCOMMIT;\n"
+  V110.3__pdf_storage.sql: "-- =============================================================================\n\
+    -- 0003_pdf_storage.up.sql  —  Phase 1.13 Track E · PDF upload + widget meta\n\
+    -- =============================================================================\n\
+    --\n-- Adds six columns to `attestations` so the Phase 1.13 PDF-upload flow\n\
+    -- (console-web /exchange/attestations/new → services/storage signed-URL →\n--\
+    \ services/ingestion auto-VC) plus the Phase 1.14 widget API has every field\n\
+    -- it needs without a second-pass migration.\n--\n-- Column-by-column:\n--\n--\
+    \   pdf_storage_pointer_id      — FK → storage_pointers(id). The PDF audit\n--\
+    \                                 report artifact uploaded via signed-URL.\n--\
+    \                                 Distinct from the existing nullable\n--    \
+    \                             `storage_pointer_id`: the latter pre-dates\n-- \
+    \                                1.13 and is used by the legacy direct-VC\n--\
+    \                                 flow (where the client supplied an already-\n\
+    --                                 hashed report). 1.13 flow populates the new\n\
+    --                                 PDF-specific column to make the data lineage\n\
+    --                                 explicit. Existing rows leave it NULL.\n--\n\
+    --   batch_mode                  — `single` = anchor this attestation alone\n\
+    --                                 (1-leaf Merkle, immediate flush); `shared`\
+    \ =\n--                                 cross-tenant Merkle batch (opt-in, GDPR\n\
+    --                                 consent recorded in audit_log). Default\n--\
+    \                                 `single` per plan §3.1 (safe default).\n--\n\
+    --   snapshot_at                 — Wall-clock instant the snapshot was taken\n\
+    --                                 by the auditor / exchange. Distinct from\n\
+    --                                 `submitted_at` (DB ingest time). Surfaced\n\
+    --                                 in widget SUMMARY tab.\n--\n--   btc_block_height\
+    \            — Bitcoin block height at the time of\n--                       \
+    \          ingestion (current chain tip from\n--                             \
+    \    services/chain-monitor). Phase 1.14 widget\n--                          \
+    \       displays this as \"anchored at block N\".\n--                        \
+    \         Differs from `anchor_txs.block_height`\n--                         \
+    \        (which is set when the reveal tx confirms);\n--                     \
+    \            this column is the snapshot tip, used for\n--                   \
+    \              freshness UX before confirmation.\n--\n--   asset_summary     \
+    \          — JSONB array of {asset, total_owed, on_chain,\n--                \
+    \                 reserve_ratio} entries. Populated from\n--                 \
+    \                console-web upload form. The widget renders\n--             \
+    \                    this verbatim — keeping it as JSONB lets\n--            \
+    \                     the form evolve without a schema migration.\n--        \
+    \                         Default `[]` so Phase 1.14 widget does not\n--     \
+    \                            need NULL handling.\n--\n--   audit_firm_display_name\
+    \     — Denormalised display name copied from\n--                            \
+    \     audit_firms at ingest time. Avoids a join\n--                          \
+    \       in the public widget API path (which is\n--                          \
+    \       anonymous and rate-limited).\n--\n-- Idempotent (per memory `feedback_migrations_idempotent.md`):\
+    \ every column\n-- ADD uses IF NOT EXISTS, the CHECK constraint is guarded by\
+    \ a\n-- pg_constraint lookup, and the new index is guarded by pg_indexes.\n--\
+    \ =============================================================================\n\
+    \nBEGIN;\n\n-- bee 포트(G24 압력#2 해소): manifest schemas:[attest] 실현 — 실 SQL 은 public\
+    \ 가정,\n-- bee 는 attest 로 안착(search_path). DDL 본문은 verbatim(압력 보존). 차트 변경 0.\n\
+    CREATE SCHEMA IF NOT EXISTS attest;\nSET search_path TO attest, public;\n\nALTER\
+    \ TABLE attestations\n  ADD COLUMN IF NOT EXISTS pdf_storage_pointer_id UUID REFERENCES\
+    \ storage_pointers(id);\n\nALTER TABLE attestations\n  ADD COLUMN IF NOT EXISTS\
+    \ batch_mode TEXT NOT NULL DEFAULT 'single';\n\nALTER TABLE attestations\n  ADD\
+    \ COLUMN IF NOT EXISTS snapshot_at TIMESTAMPTZ;\n\nALTER TABLE attestations\n\
+    \  ADD COLUMN IF NOT EXISTS btc_block_height BIGINT;\n\nALTER TABLE attestations\n\
+    \  ADD COLUMN IF NOT EXISTS asset_summary JSONB NOT NULL DEFAULT '[]'::jsonb;\n\
+    \nALTER TABLE attestations\n  ADD COLUMN IF NOT EXISTS audit_firm_display_name\
+    \ TEXT;\n\n-- batch_mode vocabulary guard.\nDO $$\nBEGIN\n  IF NOT EXISTS (\n\
+    \    SELECT 1 FROM pg_constraint\n    WHERE conname = 'attestations_batch_mode_chk'\n\
+    \  ) THEN\n    ALTER TABLE attestations\n      ADD CONSTRAINT attestations_batch_mode_chk\n\
+    \      CHECK (batch_mode IN ('single', 'shared'));\n  END IF;\nEND $$;\n\n-- btc_block_height\
+    \ non-negative guard (chain tip is always >= 0).\nDO $$\nBEGIN\n  IF NOT EXISTS\
+    \ (\n    SELECT 1 FROM pg_constraint\n    WHERE conname = 'attestations_btc_block_height_chk'\n\
+    \  ) THEN\n    ALTER TABLE attestations\n      ADD CONSTRAINT attestations_btc_block_height_chk\n\
+    \      CHECK (btc_block_height IS NULL OR btc_block_height >= 0);\n  END IF;\n\
+    END $$;\n\n-- Lookup index for the PDF-specific FK (\"attestations referencing\
+    \ this\n-- storage pointer\"). Sparse — most rows have NULL.\nDO $$\nBEGIN\n \
+    \ IF NOT EXISTS (\n    SELECT 1 FROM pg_indexes\n    WHERE schemaname = 'public'\n\
+    \      AND indexname  = 'attestations_pdf_storage_pointer_idx'\n  ) THEN\n   \
+    \ EXECUTE 'CREATE INDEX attestations_pdf_storage_pointer_idx\n             ON\
+    \ attestations (pdf_storage_pointer_id)\n             WHERE pdf_storage_pointer_id\
+    \ IS NOT NULL';\n  END IF;\nEND $$;\n\n-- Batch-mode dispatch index — the batching\
+    \ worker queries\n-- \"pending + batch_mode='single'\" for immediate flush; the\
+    \ old\n-- attestations_worker_queue_idx stays in place for the broader pending\
+    \ scan.\nDO $$\nBEGIN\n  IF NOT EXISTS (\n    SELECT 1 FROM pg_indexes\n    WHERE\
+    \ schemaname = 'public'\n      AND indexname  = 'attestations_single_pending_idx'\n\
+    \  ) THEN\n    EXECUTE 'CREATE INDEX attestations_single_pending_idx\n       \
+    \      ON attestations (submitted_at)\n             WHERE status = ''pending''\
+    \ AND batch_mode = ''single''';\n  END IF;\nEND $$;\n\nCOMMENT ON COLUMN attestations.pdf_storage_pointer_id\
+    \ IS\n  'Phase 1.13: FK to the PDF audit report uploaded via signed-URL flow.\
+    \ '\n  'Distinct from storage_pointer_id (legacy direct-VC flow). NULL for '\n\
+    \  'pre-1.13 attestations and for ZK-only flows (por_run_id non-NULL).';\nCOMMENT\
+    \ ON COLUMN attestations.batch_mode IS\n  'Phase 1.13: single = anchor alone (1-leaf\
+    \ Merkle, immediate); shared = '\n  'cross-tenant Merkle (opt-in, GDPR consent\
+    \ recorded in audit_log). Default '\n  'single — safe default per plan §3.1.';\n\
+    COMMENT ON COLUMN attestations.snapshot_at IS\n  'Phase 1.14 widget meta: wall-clock\
+    \ instant the auditor took the snapshot. '\n  'Distinct from submitted_at (DB\
+    \ ingest time).';\nCOMMENT ON COLUMN attestations.btc_block_height IS\n  'Phase\
+    \ 1.14 widget meta: Bitcoin chain tip height at ingestion time (from '\n  'services/chain-monitor).\
+    \ NOT the confirmation block height — that lives '\n  'in anchor_txs.block_height\
+    \ once the reveal tx confirms.';\nCOMMENT ON COLUMN attestations.asset_summary\
+    \ IS\n  'Phase 1.14 widget meta: JSONB array of per-asset {asset, total_owed,\
+    \ '\n  'on_chain, reserve_ratio} rows. Rendered verbatim by the widget. Default\
+    \ '\n  '[] so the public widget API never needs NULL handling.';\nCOMMENT ON COLUMN\
+    \ attestations.audit_firm_display_name IS\n  'Phase 1.14 widget meta: denormalised\
+    \ display name from audit_firms at '\n  'ingest time. Avoids a tenant-table join\
+    \ on the anonymous widget API path.';\n\nCOMMIT;\n"
+kind: ConfigMap
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: '-200'
+  name: ingestion-migrations
+  namespace: bitcert-attest

@@ -1,0 +1,8 @@
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: ingestion-ratelimit-0
+  namespace: bitcert-attest
+plugin: rate-limiting
+config:
+  minute: 60

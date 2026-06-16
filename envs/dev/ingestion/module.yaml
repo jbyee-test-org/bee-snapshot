@@ -1,0 +1,34 @@
+# ingestion 모듈 — bitcert-attest 실 슬라이스(attest 체인 1/3). 논리만(origin-free, 규칙 4).
+# 키스톤(G24): attest schema 의 **co-owner** — attestations 테이블을 생성·소유.
+# batching·anchoring 도 같은 attest 에 자기 테이블을 만든다(다중-owner 블레싱, 신규 어휘 0).
+metadata:
+  name: ingestion
+spec:
+  product: attest               # platform.yaml products[attest].namespace=bitcert-attest 로 배치
+  chart:
+    version: "0.5.2"           # bee-module pin (G6) — 로컬 chart 실버전 정렬
+  image:
+    name: ingestion            # 실 서비스(workload) — Stage 2 에서 Rust 빌드
+  dependsOn: [stubs]            # out-of-slice FK(exchanges·audit_firms·storage_pointers, G24 #5) →
+                                #   stubs 모듈이 최소 스텁 소유, depth-wave 가 먼저 migrate(실 배포는 identity/storage)
+  routing:
+    # manifest /attest/v1/attestations (canonical). methods·legacy alias·jwt-admin 은 어휘 격차(G23).
+    - { path: /attest/v1/attestations, port: 3008, auth: jwt, rateLimit: { minute: 60 } }
+  events:
+    publishes:                  # **stream owner**(G25): root 모듈이 공유 stream 을 와일드카드로 1회 선언.
+                                # subject=attest.> → Stream CR 1개가 attest.* 전부 포착(co-publisher 의
+                                # batch.created·anchor.* 포함). batching/anchoring 은 CR 안 만듦(아래 참조).
+                                # ⚠ ArgoCD 단일 App: 동명 Stream CR 중복 금지 → owner 1개만 렌더(G25).
+                                # 이 모듈의 실제 publish = attest.attestation.submitted(런타임; 와일드카드가 포착).
+      - { stream: ANN_BITCERT_ATTEST_EVENTS, subject: "attest.>" }
+  db:
+    name: attest-db             # (kind,name) 공유 그룹 — 셋이 같은 postgres
+    schema: attest              # **co-owner 마커**(G24): 단일 owner 아님 — attest 에 테이블 기여
+    migrations: db/migration    # V110.* — 모듈별 Flyway Job(G14③), 모듈별 history
+  secrets:                      # 계약(G27): 런타임 env. 인너=secrets.local.yaml(bee apply)·아웃터=ESO(ASM).
+                                # envFrom: {release}-secrets 트리거. (좌표/secret 분리는 G27 plain-env 후속.)
+    - { group: db,   property: BITCERT_DATABASE_URL }
+    - { group: nats, property: BITCERT_NATS_URL }
+    - { group: dev,  property: BITCERT_DEV_EXCHANGE_ID }
+    - { group: dev,  property: BITCERT_DEV_AUDIT_FIRM_ID }
+    - { group: net,  property: BITCERT_PORT }

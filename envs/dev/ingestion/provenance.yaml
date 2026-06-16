@@ -1,0 +1,7 @@
+module: ingestion
+repoUrl: https://github.com/jbyee-test-org/ingestion
+moduleCommit: 5ed0e9a4a355634e05eff82fc65c2a71bd49d391
+imageDigest: sha256:bbbaf7962e5568a722d2f7294f43d85593260c51ece243aafdc15548c61df72b
+chartVersion: 0.5.2
+dependsOn:
+- stubs

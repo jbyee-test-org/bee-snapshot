@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingestion
+  namespace: bitcert-attest
+  labels:
+    app.kubernetes.io/name: ingestion
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ingestion
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ingestion
+    spec:
+      containers:
+      - name: ingestion
+        image: ghcr.io/jbyee-test-org/bitcert/ingestion@sha256:bbbaf7962e5568a722d2f7294f43d85593260c51ece243aafdc15548c61df72b
+        ports:
+        - containerPort: 3008
+        envFrom:
+        - secretRef:
+            name: ingestion-secrets
