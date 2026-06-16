@@ -1,14 +1,13 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: ingestion-migrate-c5dcee3c49aa
+  name: ingestion-migrate-fb0b180d4faa
   namespace: bitcert-attest
   labels:
     bee.dev/module: ingestion
-    bee.dev/mighash: c5dcee3c49aa
+    bee.dev/mighash: fb0b180d4faa
   annotations:
     argocd.argoproj.io/sync-wave: '-99'
-    argocd.argoproj.io/sync-options: Replace=true
 spec:
   backoffLimit: 6
   template:
