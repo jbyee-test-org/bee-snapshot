@@ -1,6 +1,6 @@
 module: stubs
 repoUrl: https://github.com/jbyee-test-org/stubs
-moduleCommit: f01eb332012c3957afbd424e7939fc67b05e0485
+moduleCommit: 074278938132f2f8f1a3ff9a3ab2bc3a7e0fc69c
 imageDigest: ''
-chartVersion: 0.5.2
+chartVersion: 0.5.4
 dependsOn: []
