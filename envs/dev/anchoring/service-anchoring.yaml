@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: anchoring
+  namespace: bitcert-attest
+spec:
+  selector:
+    app.kubernetes.io/name: anchoring
+  ports:
+  - port: 3009
+    targetPort: 3009

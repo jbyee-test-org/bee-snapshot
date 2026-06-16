@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: anchoring
+  namespace: bitcert-attest
+  labels:
+    app.kubernetes.io/name: anchoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: anchoring
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: anchoring
+    spec:
+      containers:
+      - name: anchoring
+        image: ghcr.io/jbyee-test-org/bitcert/anchoring@sha256:0f2335d1b402b8b0dd0f922dc382951d4591639c95b3cffc52ada1389f9d7d36
+        ports:
+        - containerPort: 3009
+        envFrom:
+        - secretRef:
+            name: anchoring-secrets

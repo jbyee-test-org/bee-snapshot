@@ -1,0 +1,20 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: anchoring
+  namespace: bitcert-attest
+  annotations:
+    konghq.com/plugins: anchoring-ratelimit-0,anchoring-jwt-0
+spec:
+  ingressClassName: kong
+  rules:
+  - host: anchoring.dev.bitcert.test
+    http:
+      paths:
+      - path: /attest/v1/anchors
+        pathType: Prefix
+        backend:
+          service:
+            name: anchoring
+            port:
+              number: 3009

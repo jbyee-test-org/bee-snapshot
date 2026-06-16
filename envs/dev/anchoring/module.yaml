@@ -1,0 +1,30 @@
+# anchoring 모듈 — bitcert-attest 실 슬라이스(attest 체인 3/3). 논리만(origin-free, 규칙 4).
+# 키스톤(G24): attest 의 **세 번째 co-owner** — anchor_txs 생성(batches FK). RBF 컬럼은 0002·0003.
+metadata:
+  name: anchoring
+spec:
+  product: attest
+  chart:
+    version: "0.5.2"
+  image:
+    name: anchoring            # 실 서비스(workload)
+  dependsOn: [batching]         # anchor_txs→batches FK → batching 먼저(depth-wave -98 < batching -99).
+                                #   체인: ingestion(-100) ← batching(-99) ← anchoring(-98). 키스톤 순서.
+  routing:
+    # manifest /attest/v1/anchors. admin bump(jwt-admin) route 는 어휘 격차(G23) — canonical 만.
+    - { path: /attest/v1/anchors, port: 3009, auth: jwt, rateLimit: { minute: 300 } }
+  # events 선언 없음(G25): attest.anchor.{broadcast,confirmed,reorged} 는 **런타임 publish**.
+  # 공유 stream(owner=ingestion 의 attest.> 와일드카드)이 셋 다 포착 — Stream CR 불필(동명 중복 회피).
+  # publish 계약(3 subject) 정합 검증은 P1 CI lint(향후) 몫.
+  db:
+    name: attest-db
+    schema: attest              # co-owner
+    migrations: db/migration    # V120.* — anchor_txs + RBF
+  secrets:                      # 계약(G27). bitcoind RPC = substrate bitcoind 좌표(G28 module→substrate 의존, 어휘 0).
+    - { group: db,      property: BITCERT_DATABASE_URL }
+    - { group: nats,    property: BITCERT_NATS_URL }
+    - { group: net,     property: BITCERT_PORT }
+    - { group: nats,    property: BITCERT_NATS_STREAM }
+    - { group: bitcoin, property: BITCERT_BITCOIND_RPC_URL }
+    - { group: bitcoin, property: BITCERT_BITCOIND_RPC_USER }
+    - { group: bitcoin, property: BITCERT_BITCOIND_RPC_PASSWORD }

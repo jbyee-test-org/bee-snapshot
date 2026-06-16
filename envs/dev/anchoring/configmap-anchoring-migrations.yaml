@@ -1,0 +1,225 @@
+apiVersion: v1
+data:
+  V120.1__anchor_txs.sql: "-- =============================================================================\n\
+    -- 0001_anchor_txs.up.sql  —  BitCert Anchoring Domain · Bitcoin Commit-Reveal\n\
+    -- =============================================================================\n\
+    --\n-- Owner service (writes): services/anchoring  (Phase 2 Real; Stub in Phase\
+    \ 1)\n-- Readers:                services/chain-monitor (updates confirmations\
+    \ on new\n--                         blocks), services/verification (resolves\
+    \ a batch to\n--                         its on-chain anchor), services/reporting.\n\
+    --\n-- Helm hook weight: 20  (runs AFTER batching (15) so the inline FK\n--  \
+    \                      batch_id -> batches(id) resolves; BEFORE audit-trail\n\
+    --                        (25) and chain-monitor (30).)\n--\n-- Tenant posture:\n\
+    --   NO tenant column. Anchors are cross-tenant by construction (one anchor\n\
+    --   covers a cross-tenant batch — see batching/0001 header). Tenant\n--   isolation\
+    \ at query time joins back through batches -> attestations ->\n--   exchanges.\n\
+    --\n-- OP_RETURN v30 witness structure (proprietary):\n--   The actual Taproot\
+    \ commit-reveal payload construction lives in the\n--   anchoring-engine crate\
+    \ and is PATENT-PROTECTED (see CLAUDE.md §1.5).\n--   This migration stores only\
+    \ the resulting txids / block metadata / MuSig2\n--   aggregate signature — nothing\
+    \ about the v30 witness encoding itself.\n--\n-- Reorg handling:\n--   When chain-monitor\
+    \ detects a reorg that unwinds the anchor block, the\n--   status transitions\
+    \ confirmed -> reorged, reorged_at is stamped, and\n--   services/anchoring either\
+    \ re-broadcasts or assembles a fresh anchor.\n--   The row is NOT deleted — auditors\
+    \ need the history.\n-- =============================================================================\n\
+    \nBEGIN;\n\n-- bee 포트(G24 압력#2 해소): manifest schemas:[attest] 실현 — 실 SQL 은 public\
+    \ 가정,\n-- bee 는 attest 로 안착(search_path). DDL 본문은 verbatim(압력 보존). 차트 변경 0.\n\
+    CREATE SCHEMA IF NOT EXISTS attest;\nSET search_path TO attest, public;\n\nCREATE\
+    \ TABLE IF NOT EXISTS anchor_txs (\n  id                  UUID         PRIMARY\
+    \ KEY DEFAULT gen_random_uuid(),\n  batch_id            BYTEA        NOT NULL\
+    \ REFERENCES batches(id),\n  network             TEXT         NOT NULL,\n\n  commit_txid\
+    \         BYTEA,\n  reveal_txid         BYTEA,\n  block_height        BIGINT,\n\
+    \  block_hash          BYTEA,\n  confirmations       INTEGER      NOT NULL DEFAULT\
+    \ 0,\n  fee_paid_sats       BIGINT,\n\n  status              TEXT         NOT\
+    \ NULL DEFAULT 'broadcasting',\n  musig2_signature    BYTEA,\n\n  broadcast_at\
+    \        TIMESTAMPTZ,\n  confirmed_at        TIMESTAMPTZ,\n  reorged_at      \
+    \    TIMESTAMPTZ,\n\n  created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),\n\
+    \  updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),\n\n  -- batch_id shape\
+    \ (same BYTEA(16) invariant as batches.id).\n  CONSTRAINT anchor_txs_batch_id_length_chk\n\
+    \    CHECK (octet_length(batch_id) = 16),\n\n  -- Bitcoin network vocabulary.\n\
+    \  CONSTRAINT anchor_txs_network_chk\n    CHECK (network IN ('mainnet', 'testnet',\
+    \ 'regtest', 'signet')),\n\n  -- Txids are 32-byte SHA-256 double-hashes.\n  CONSTRAINT\
+    \ anchor_txs_commit_txid_length_chk\n    CHECK (commit_txid IS NULL OR octet_length(commit_txid)\
+    \ = 32),\n  CONSTRAINT anchor_txs_reveal_txid_length_chk\n    CHECK (reveal_txid\
+    \ IS NULL OR octet_length(reveal_txid) = 32),\n\n  -- Block height non-negative\
+    \ when set.\n  CONSTRAINT anchor_txs_block_height_nonneg_chk\n    CHECK (block_height\
+    \ IS NULL OR block_height >= 0),\n\n  -- Block hash is 32 bytes when set.\n  CONSTRAINT\
+    \ anchor_txs_block_hash_length_chk\n    CHECK (block_hash IS NULL OR octet_length(block_hash)\
+    \ = 32),\n\n  -- Confirmation counter.\n  CONSTRAINT anchor_txs_confirmations_nonneg_chk\n\
+    \    CHECK (confirmations >= 0),\n\n  -- Fee is positive when set (zero-fee txs\
+    \ are not RBF-safe for anchoring).\n  CONSTRAINT anchor_txs_fee_positive_chk\n\
+    \    CHECK (fee_paid_sats IS NULL OR fee_paid_sats > 0),\n\n  -- Status lifecycle:\n\
+    \  --   broadcasting -> pending (seen in mempool) -> confirmed\n  --         \
+    \                                  \\-> reorged (unwound)\n  --              \
+    \        \\-> failed (rejected / feemarket lost)\n  CONSTRAINT anchor_txs_status_chk\n\
+    \    CHECK (status IN ('broadcasting', 'pending', 'confirmed', 'reorged', 'failed')),\n\
+    \n  -- Schnorr signature for Taproot key-path spend = 64 bytes.\n  -- MuSig2 aggregates\
+    \ to a single Schnorr sig.\n  CONSTRAINT anchor_txs_musig2_signature_length_chk\n\
+    \    CHECK (musig2_signature IS NULL OR octet_length(musig2_signature) = 64),\n\
+    \n  -- Confirmed implies block_height AND reveal_txid present.\n  CONSTRAINT anchor_txs_confirmed_consistency_chk\n\
+    \    CHECK (\n      (status = 'confirmed'\n         AND block_height IS NOT NULL\n\
+    \         AND reveal_txid  IS NOT NULL)\n      OR status <> 'confirmed'\n    ),\n\
+    \n  -- Reorged implies reorged_at stamped.\n  CONSTRAINT anchor_txs_reorged_consistency_chk\n\
+    \    CHECK (\n      (status = 'reorged' AND reorged_at IS NOT NULL)\n      OR\
+    \ status <> 'reorged'\n    )\n);\n\n-- Indexes -------------------------------------------------------------------\n\
+    -- \"Give me all anchor attempts for batch X\" (reporting + reorg recovery).\n\
+    CREATE INDEX IF NOT EXISTS anchor_txs_batch_idx\n  ON anchor_txs (batch_id);\n\
+    \n-- Txid lookup: chain-monitor maps an observed confirmation back to us by\n\
+    -- reveal_txid. Partial because commit_txid alone is not enough.\nCREATE INDEX\
+    \ IF NOT EXISTS anchor_txs_reveal_txid_idx\n  ON anchor_txs (reveal_txid) WHERE\
+    \ reveal_txid IS NOT NULL;\n\n-- Worker queue: things that still need attention.\n\
+    CREATE INDEX IF NOT EXISTS anchor_txs_worker_queue_idx\n  ON anchor_txs (status,\
+    \ created_at)\n  WHERE status IN ('broadcasting', 'pending', 'failed', 'reorged');\n\
+    \n-- Block-height window queries (reorg audits).\nCREATE INDEX IF NOT EXISTS anchor_txs_block_height_idx\n\
+    \  ON anchor_txs (block_height) WHERE block_height IS NOT NULL;\n\n-- updated_at\
+    \ trigger (shared function from identity/0001).\nDROP TRIGGER IF EXISTS anchor_txs_set_updated_at\
+    \ ON anchor_txs;\nCREATE TRIGGER anchor_txs_set_updated_at\n  BEFORE UPDATE ON\
+    \ anchor_txs\n  FOR EACH ROW\n  EXECUTE FUNCTION set_updated_at();\n\nCOMMENT\
+    \ ON TABLE anchor_txs IS\n  'Bitcoin L1 commit-reveal transactions anchoring Merkle\
+    \ batches. One row '\n  'per anchor attempt per batch. Patent-sensitive witness\
+    \ encoding is '\n  'handled in anchoring-engine crate — this table stores only\
+    \ resulting '\n  'txids / block metadata / MuSig2 aggregate signature. Tenant-agnostic;\
+    \ '\n  'tenant join via batches -> merkle_proofs -> attestations.';\nCOMMENT ON\
+    \ COLUMN anchor_txs.commit_txid IS\n  'SHA-256d txid of the Taproot commit transaction\
+    \ (locks the funding). '\n  '32 bytes. NULL until broadcast succeeds.';\nCOMMENT\
+    \ ON COLUMN anchor_txs.reveal_txid IS\n  'SHA-256d txid of the reveal transaction\
+    \ that publishes the OP_RETURN v30 '\n  'payload + witness. 32 bytes. NULL until\
+    \ broadcast succeeds.';\nCOMMENT ON COLUMN anchor_txs.musig2_signature IS\n  '64-byte\
+    \ BIP-340 Schnorr signature aggregated via MuSig2 over the reveal '\n  'tx sighash.\
+    \ Populated once the co-signer ceremony completes.';\nCOMMENT ON COLUMN anchor_txs.confirmations\
+    \ IS\n  'Rolling confirmation count maintained by services/chain-monitor. Reset\
+    \ to '\n  '0 on reorg. Anchors reach \"confirmed\" at configured depth (Phase\
+    \ 1: 6 '\n  'confs mainnet, 2 confs testnet/signet).';\n\n-- TODO(Phase-2): add\
+    \ view v_anchored_batches joining batches + anchor_txs\n-- on batch_id, filtered\
+    \ to status='confirmed'. Deferred here to keep the\n-- migration minimal; services/verification\
+    \ queries the tables directly in\n-- Phase 1.\n\nCOMMIT;\n"
+  V120.2__rbf.sql: "-- =============================================================================\n\
+    -- 0002_rbf.up.sql  —  Phase 1.6 Track C · Replace-By-Fee tracking\n-- =============================================================================\n\
+    --\n-- Adds the bookkeeping anchor_txs needs to support BIP-125 RBF (mempool\n\
+    -- bumpfee) when a reveal sits in `pending` longer than the configured\n-- threshold.\
+    \ The actual bumpfee call happens in services/anchoring (see\n-- src/bitcoin/rbf.rs).\
+    \ chain-monitor watches both the original reveal_txid\n-- and replaced_by_txid\
+    \ so a confirmed replacement walks the original row's\n-- status to `replaced`\
+    \ instead of `confirmed`.\n--\n-- Status lifecycle additions (the original `anchor_txs_status_chk`\
+    \ already\n-- enumerates broadcasting/pending/confirmed/reorged/failed; we extend\
+    \ it\n-- with `replaced`):\n--\n--   pending --(bumpfee)--> pending [bumpfee_count++,\
+    \ replaced_by_txid set]\n--   pending --(replacement confirmed)--> replaced\n\
+    --\n-- The replacement chain is single-link (`replaced_by_txid` points at one\n\
+    -- successor). Multi-bump is handled by overwriting the field — earlier\n-- replacements\
+    \ are reflected via `bumpfee_count`.\n--\n-- Helm hook weight: 21 (after 0001\
+    \ anchor_txs at weight 20).\n-- =============================================================================\n\
+    \nBEGIN;\n\n-- bee 포트(G24 압력#2 해소): manifest schemas:[attest] 실현 — 실 SQL 은 public\
+    \ 가정,\n-- bee 는 attest 로 안착(search_path). DDL 본문은 verbatim(압력 보존). 차트 변경 0.\n\
+    CREATE SCHEMA IF NOT EXISTS attest;\nSET search_path TO attest, public;\n\nALTER\
+    \ TABLE anchor_txs\n  -- The 32-byte txid of the bumped replacement reveal tx\
+    \ (the new mempool\n  -- entry created by `bumpfee`). NULL until an RBF replacement\
+    \ is published.\n  ADD COLUMN IF NOT EXISTS replaced_by_txid BYTEA;\n\nALTER TABLE\
+    \ anchor_txs\n  -- How many times this anchor has been bumped. Bumps a CHECK ceiling\
+    \ so\n  -- a runaway loop (or a misconfigured RBF policy) gets caught at the DB.\n\
+    \  ADD COLUMN IF NOT EXISTS bumpfee_count INTEGER NOT NULL DEFAULT 0;\n\n-- Replaced\
+    \ txid is 32 bytes when set.\nALTER TABLE anchor_txs DROP CONSTRAINT IF EXISTS\
+    \ anchor_txs_replaced_by_txid_length_chk;\nALTER TABLE anchor_txs\n  ADD CONSTRAINT\
+    \ anchor_txs_replaced_by_txid_length_chk\n    CHECK (replaced_by_txid IS NULL\
+    \ OR octet_length(replaced_by_txid) = 32);\n\n-- Bumpfee count cap.\nALTER TABLE\
+    \ anchor_txs DROP CONSTRAINT IF EXISTS anchor_txs_bumpfee_count_chk;\nALTER TABLE\
+    \ anchor_txs\n  ADD CONSTRAINT anchor_txs_bumpfee_count_chk\n    CHECK (bumpfee_count\
+    \ >= 0 AND bumpfee_count <= 10);\n\n-- Extend the status vocabulary with `replaced`.\
+    \ Drop + recreate so the\n-- new value joins the CHECK set.\nALTER TABLE anchor_txs\
+    \ DROP CONSTRAINT IF EXISTS anchor_txs_status_chk;\nALTER TABLE anchor_txs\n \
+    \ ADD CONSTRAINT anchor_txs_status_chk\n    CHECK (status IN ('broadcasting',\
+    \ 'pending', 'confirmed', 'reorged', 'failed', 'replaced'));\n\n-- A `replaced`\
+    \ row must carry the successor txid. Without this constraint\n-- a buggy chain-monitor\
+    \ write could mark a row replaced without recording\n-- which tx replaced it,\
+    \ breaking the audit chain.\nALTER TABLE anchor_txs DROP CONSTRAINT IF EXISTS\
+    \ anchor_txs_replaced_consistency_chk;\nALTER TABLE anchor_txs\n  ADD CONSTRAINT\
+    \ anchor_txs_replaced_consistency_chk\n    CHECK (\n      (status = 'replaced'\
+    \ AND replaced_by_txid IS NOT NULL)\n      OR status <> 'replaced'\n    );\n\n\
+    -- Index for chain-monitor: \"find me anchors that have been replaced and\n--\
+    \ need their successor's confirmation polled\".\nCREATE INDEX IF NOT EXISTS anchor_txs_replaced_by_txid_idx\n\
+    \  ON anchor_txs (replaced_by_txid) WHERE replaced_by_txid IS NOT NULL;\n\n--\
+    \ Index for the RBF monitor: \"give me pending anchors older than N minutes\"\
+    .\n-- Reuses the worker_queue index when status='pending'; this dedicated index\n\
+    -- is for the RBF policy task that scans by created_at within the pending set.\n\
+    CREATE INDEX IF NOT EXISTS anchor_txs_pending_age_idx\n  ON anchor_txs (created_at)\
+    \ WHERE status = 'pending';\n\nCOMMENT ON COLUMN anchor_txs.replaced_by_txid IS\n\
+    \  'BIP-125 RBF: the 32-byte txid that replaced this reveal in the mempool. '\n\
+    \  'NULL until a bumpfee call publishes a replacement. Set by services/anchoring.';\n\
+    COMMENT ON COLUMN anchor_txs.bumpfee_count IS\n  'How many times this anchor has\
+    \ been fee-bumped. Capped at 10 by CHECK to '\n  'catch runaway RBF loops. Ops\
+    \ alarm fires above 3.';\n\nCOMMIT;\n"
+  V120.3__rbf_raw_replacement.sql: "-- =============================================================================\n\
+    -- 0003_rbf_raw_replacement.up.sql  —  Phase 1.9.1 · Wallet-free RBF columns\n\
+    -- =============================================================================\n\
+    --\n-- Problem this migration solves\n-- -----------------------------\n-- Phase\
+    \ 1.6 Track C wired RBF through bitcoind's `bumpfee` RPC. That RPC\n-- only operates\
+    \ on transactions the bitcoind wallet itself signed and\n-- broadcast, but our\
+    \ reveal tx is signed in-process (BIP-341 key-path\n-- spend over a commit output\
+    \ owned by `services/anchoring`'s own\n-- keypair), so bitcoind responds with\
+    \ `-5 Invalid or non-wallet\n-- transaction id`.\n--\n-- Phase 1.9.1 replaces\
+    \ that path with a raw-replacement implementation:\n-- the service rebuilds the\
+    \ reveal tx with a higher fee, re-signs it\n-- locally, and broadcasts via `sendrawtransaction`.\
+    \ To do this offline\n-- the service needs to remember the inputs it would otherwise\
+    \ re-derive\n-- by querying bitcoind, plus the original signed reveal tx so the\
+    \ next\n-- bump round-trips deterministically.\n--\n-- New columns on `anchor_txs`\n\
+    -- ---------------------------\n-- commit_vout              INTEGER  — the output\
+    \ index inside the commit\n--                                     tx that the\
+    \ reveal spends. Always 0\n--                                     today (BuiltCommitReveal\
+    \ lays it\n--                                     out as output[0]); persisted\
+    \ so a\n--                                     future change to the layout can\n\
+    --                                     bump the value without breaking\n--   \
+    \                                  historical anchors.\n-- commit_output_value_sats\
+    \ BIGINT   — the sats value of that output. fee\n--                          \
+    \           budget = commit_output_value_sats\n--                            \
+    \         - new_fee on every bump.\n-- reveal_raw_hex           TEXT     — the\
+    \ fully-signed reveal tx hex at\n--                                     last broadcast.\
+    \ Re-deserialised on\n--                                     each bump to inherit\
+    \ the OP_RETURN\n--                                     payload + change script\
+    \ verbatim;\n--                                     only the change output amount\
+    \ and\n--                                     the witness signature change\n--\
+    \                                     between successive replacements.\n-- reveal_fee_sats\
+    \          BIGINT   — fee paid by the broadcast reveal.\n--                  \
+    \                   Distinct from `fee_paid_sats`\n--                        \
+    \             (which records the FIRST broadcast\n--                         \
+    \            fee per the audit lineage); this\n--                            \
+    \         column is the running fee that\n--                                 \
+    \    `rbf::bump_anchor` reads + writes.\n--\n-- Idempotency\n-- -----------\n\
+    -- Migration runner has no tracking table (CLAUDE.md feedback memory\n-- `feedback_migrations_idempotent`);\
+    \ every .up.sql re-runs on every\n-- helm upgrade. All ALTER statements use `ADD\
+    \ COLUMN IF NOT EXISTS`\n-- and `DROP CONSTRAINT IF EXISTS` before re-adding so\
+    \ re-runs are safe.\n--\n-- Helm hook weight: 22 (after 0002_rbf at weight 21).\n\
+    -- =============================================================================\n\
+    \nBEGIN;\n\n-- bee 포트(G24 압력#2 해소): manifest schemas:[attest] 실현 — 실 SQL 은 public\
+    \ 가정,\n-- bee 는 attest 로 안착(search_path). DDL 본문은 verbatim(압력 보존). 차트 변경 0.\n\
+    CREATE SCHEMA IF NOT EXISTS attest;\nSET search_path TO attest, public;\n\nALTER\
+    \ TABLE anchor_txs\n  ADD COLUMN IF NOT EXISTS commit_vout INTEGER;\n\nALTER TABLE\
+    \ anchor_txs\n  ADD COLUMN IF NOT EXISTS commit_output_value_sats BIGINT;\n\n\
+    ALTER TABLE anchor_txs\n  ADD COLUMN IF NOT EXISTS reveal_raw_hex TEXT;\n\nALTER\
+    \ TABLE anchor_txs\n  ADD COLUMN IF NOT EXISTS reveal_fee_sats BIGINT;\n\n-- vout\
+    \ must be a non-negative integer when set.\nALTER TABLE anchor_txs DROP CONSTRAINT\
+    \ IF EXISTS anchor_txs_commit_vout_chk;\nALTER TABLE anchor_txs\n  ADD CONSTRAINT\
+    \ anchor_txs_commit_vout_chk\n    CHECK (commit_vout IS NULL OR commit_vout >=\
+    \ 0);\n\n-- Output value strictly positive when set (zero / negative would fail\n\
+    -- bitcoind's dust check on the rebuild path).\nALTER TABLE anchor_txs DROP CONSTRAINT\
+    \ IF EXISTS anchor_txs_commit_output_value_chk;\nALTER TABLE anchor_txs\n  ADD\
+    \ CONSTRAINT anchor_txs_commit_output_value_chk\n    CHECK (commit_output_value_sats\
+    \ IS NULL OR commit_output_value_sats > 0);\n\n-- Running fee strictly positive\
+    \ when set.\nALTER TABLE anchor_txs DROP CONSTRAINT IF EXISTS anchor_txs_reveal_fee_chk;\n\
+    ALTER TABLE anchor_txs\n  ADD CONSTRAINT anchor_txs_reveal_fee_chk\n    CHECK\
+    \ (reveal_fee_sats IS NULL OR reveal_fee_sats > 0);\n\nCOMMENT ON COLUMN anchor_txs.commit_vout\
+    \ IS\n  'Output index of the commit tx the reveal spends. Filled at broadcast\
+    \ '\n  'so the wallet-free RBF rebuilder (Phase 1.9.1) does not have to query\
+    \ '\n  'bitcoind to relocate it.';\nCOMMENT ON COLUMN anchor_txs.commit_output_value_sats\
+    \ IS\n  'sats value of the commit output the reveal spends. Used by '\n  'rbf::bump_anchor\
+    \ to compute the new reveal change = '\n  'commit_output_value_sats - new_fee.';\n\
+    COMMENT ON COLUMN anchor_txs.reveal_raw_hex IS\n  'Last-broadcast reveal tx hex\
+    \ (signed). Updated on every successful RBF '\n  'so the next bump deserialises\
+    \ the current mempool tx, not the '\n  'original one.';\nCOMMENT ON COLUMN anchor_txs.reveal_fee_sats\
+    \ IS\n  'Fee in sats paid by the last-broadcast reveal. Phase 1.9.1 RBF base '\n\
+    \  'fee — distinct from fee_paid_sats which retains the first-broadcast '\n  'fee\
+    \ for audit lineage.';\n\nCOMMIT;\n"
+kind: ConfigMap
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: '-200'
+  name: anchoring-migrations
+  namespace: bitcert-attest

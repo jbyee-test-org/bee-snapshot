@@ -1,0 +1,34 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: anchoring-migrate-a9dd067861c6
+  namespace: bitcert-attest
+  labels:
+    bee.dev/module: anchoring
+    bee.dev/mighash: a9dd067861c6
+  annotations:
+    argocd.argoproj.io/sync-wave: '-100'
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: flyway
+        image: flyway/flyway:10-alpine
+        args:
+        - -url=jdbc:postgresql://postgres.bee-substrate.svc.cluster.local:5432/bee
+        - -user=bee
+        - -password=bee-demo
+        - -connectRetries=30
+        - -table=flyway_history_anchoring
+        - -locations=filesystem:/sql
+        - -baselineOnMigrate=true
+        - migrate
+        volumeMounts:
+        - name: sql
+          mountPath: /sql
+      volumes:
+      - name: sql
+        configMap:
+          name: anchoring-migrations
