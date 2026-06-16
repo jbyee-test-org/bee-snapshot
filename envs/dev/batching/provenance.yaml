@@ -1,7 +1,7 @@
 module: batching
 repoUrl: https://github.com/jbyee-test-org/batching
-moduleCommit: e7c3a4866b8eda5c95809b9b4b77002ace79b7c7
+moduleCommit: b73e3f6d86b0c1f5e8c7f51ad6829fc428330116
 imageDigest: sha256:7dfc9ca1d97656f6f2e71b6752c8f7592568ea72ac0c5286ce2a07beebc1b529
-chartVersion: 0.5.2
+chartVersion: 0.5.4
 dependsOn:
 - ingestion

@@ -1,13 +1,14 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: batching-migrate-259abecc4ce2
+  name: batching-migrate-d601869f7a5c
   namespace: bitcert-attest
   labels:
     bee.dev/module: batching
-    bee.dev/mighash: 259abecc4ce2
+    bee.dev/mighash: d601869f7a5c
   annotations:
     argocd.argoproj.io/sync-wave: '-98'
+    argocd.argoproj.io/sync-options: Replace=true,Force=true
 spec:
   backoffLimit: 6
   template:
@@ -21,6 +22,7 @@ spec:
         - -user=bee
         - -password=bee-demo
         - -connectRetries=30
+        - -schemas=attest,public
         - -table=flyway_history_batching
         - -locations=filesystem:/sql
         - -baselineOnMigrate=true
