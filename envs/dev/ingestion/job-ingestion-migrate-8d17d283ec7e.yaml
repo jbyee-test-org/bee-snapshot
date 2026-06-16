@@ -1,13 +1,14 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: ingestion-migrate-fb0b180d4faa
+  name: ingestion-migrate-8d17d283ec7e
   namespace: bitcert-attest
   labels:
     bee.dev/module: ingestion
-    bee.dev/mighash: fb0b180d4faa
+    bee.dev/mighash: 8d17d283ec7e
   annotations:
     argocd.argoproj.io/sync-wave: '-99'
+    argocd.argoproj.io/sync-options: Replace=true,Force=true
 spec:
   backoffLimit: 6
   template:
@@ -21,6 +22,7 @@ spec:
         - -user=bee
         - -password=bee-demo
         - -connectRetries=30
+        - -schemas=attest,public
         - -table=flyway_history_ingestion
         - -locations=filesystem:/sql
         - -baselineOnMigrate=true
