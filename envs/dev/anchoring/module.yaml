@@ -5,7 +5,7 @@ metadata:
 spec:
   product: attest
   chart:
-    version: "0.5.3"             # bee-module pin (G6) — 0.5.3 Replace=true(G32 finding b)
+    version: "0.5.2"             # bee-module pin (G6) — 0.5.3 revert(Replace=true Job sync 버그, 엔진 픽스 대기)
   image:
     name: anchoring            # 실 서비스(workload)
   dependsOn: [batching]         # anchor_txs→batches FK → batching 먼저(depth-wave -98 < batching -99).
