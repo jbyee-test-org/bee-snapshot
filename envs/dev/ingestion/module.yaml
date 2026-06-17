@@ -6,7 +6,7 @@ metadata:
 spec:
   product: attest               # platform.yaml products[attest].namespace=bitcert-attest 로 배치
   chart:
-    version: "0.5.4"           # bee-module pin (G6) — A안(-schemas 결정화 + Force, finding #6 근본책)
+    version: "0.5.8"           # bee-module pin (G6) — G44 db 코덱(target). (A안 -schemas 결정화+Force, finding #6)
   image:
     name: ingestion            # 실 서비스(workload) — Stage 2 에서 Rust 빌드
   dependsOn: [stubs]            # out-of-slice FK(exchanges·audit_firms·storage_pointers, G24 #5) →
@@ -14,8 +14,10 @@ spec:
   routing:
     # manifest /attest/v1/attestations (canonical). methods·legacy alias·jwt-admin 은 어휘 격차(G23).
     - { path: /attest/v1/attestations, port: 3008, auth: jwt, rateLimit: { minute: 60 } }
-  # events 어휘 제거(G42) — 접속형(connect-to). natsUrl 좌표(BITCERT_NATS_URL)로 런타임 publish,
-  # 공유 stream ANN_BITCERT_ATTEST_EVENTS(attest.>)도 앱이 런타임에 소유(get_or_create_stream).
+  # events 어휘 제거(G42) — events 는 접속형(connect-to). 이 서비스는 natsUrl 좌표(BITCERT_NATS_URL)로
+  # NATS 에 연결해 런타임에 attest.attestation.submitted 를 publish 하고, 공유 stream
+  # ANN_BITCERT_ATTEST_EVENTS(attest.>)도 **앱이 런타임에 소유**(get_or_create_stream, 멱등).
+  # 플랫폼이 NACK Stream CR 로 주입하지 않는다. 계약 표면은 asyncapi(로드맵 `bee contracts`).
   db:
     target: psql                # G44 — db 방언(필수, 기본값 없음). 이 모듈 SQL = postgres
     name: attest-db             # (kind,name) 공유 그룹 — 셋이 같은 postgres

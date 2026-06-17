@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: ingestion
-        image: ghcr.io/jbyee-test-org/bitcert/ingestion@sha256:bbbaf7962e5568a722d2f7294f43d85593260c51ece243aafdc15548c61df72b
+        image: ghcr.io/jbyee-test-org/bitcert/ingestion@sha256:bf0faeb9fdc1281523deafa109268a1dc6acfc259c6cf3282a62ecee66820229
         ports:
         - containerPort: 3008
         envFrom:
