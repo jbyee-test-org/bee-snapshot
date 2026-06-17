@@ -1,11 +1,11 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: batching-migrate-d601869f7a5c
+  name: batching-migrate-14783739c77d
   namespace: bitcert-attest
   labels:
     bee.dev/module: batching
-    bee.dev/mighash: d601869f7a5c
+    bee.dev/mighash: 14783739c77d
   annotations:
     argocd.argoproj.io/sync-wave: '-98'
     argocd.argoproj.io/sync-options: Replace=true,Force=true
