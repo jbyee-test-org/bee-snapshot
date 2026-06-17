@@ -17,6 +17,7 @@ spec:
   # events 어휘 제거(G42) — 접속형(connect-to). natsUrl 좌표(BITCERT_NATS_URL)로 런타임 publish,
   # 공유 stream ANN_BITCERT_ATTEST_EVENTS(attest.>)도 앱이 런타임에 소유(get_or_create_stream).
   db:
+    target: psql                # G44 — db 방언(필수, 기본값 없음). 이 모듈 SQL = postgres
     name: attest-db             # (kind,name) 공유 그룹 — 셋이 같은 postgres
     schema: attest              # **co-owner 마커**(G24): 단일 owner 아님 — attest 에 테이블 기여
     migrations: db/migration    # V110.* — 모듈별 Flyway Job(G14③), 모듈별 history

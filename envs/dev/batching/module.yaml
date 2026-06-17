@@ -15,6 +15,7 @@ spec:
   # 공유 stream(ANN_BITCERT_ATTEST_EVENTS, owner=ingestion 의 attest.> 와일드카드)이 포착하므로
   # 여기서 Stream CR 을 만들면 ArgoCD 동명 중복 = sync 에러. publish 계약 정합 검증은 P1 CI lint(향후).
   db:
+    target: psql                # G44 — db 방언(필수, 기본값 없음). 이 모듈 SQL = postgres
     name: attest-db
     schema: attest              # co-owner — ingestion 과 같은 schema 에 자기 테이블(다중-owner)
     migrations: db/migration    # V115.* — batches, merkle_proofs, link_ingestion(cross-module ALTER)

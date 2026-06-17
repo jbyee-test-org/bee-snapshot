@@ -12,6 +12,7 @@ spec:
     - { path: /web/v1, port: 8080 }
   # events 어휘 제거(G42) — 접속형(connect-to). 구독은 natsUrl 좌표로 런타임에 직접.
   db:
+    target: psql                # G44 — db 방언(필수, 기본값 없음). 이 모듈 SQL = postgres
     name: attest-db
     grants:                     # cross-schema 명시 선언(G14) → chart 가 R__grants.sql 파생
       - { schema: attest, access: read }

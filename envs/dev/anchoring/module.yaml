@@ -17,6 +17,7 @@ spec:
   # 공유 stream(owner=ingestion 의 attest.> 와일드카드)이 셋 다 포착 — Stream CR 불필(동명 중복 회피).
   # publish 계약(3 subject) 정합 검증은 P1 CI lint(향후) 몫.
   db:
+    target: psql                # G44 — db 방언(필수, 기본값 없음). 이 모듈 SQL = postgres
     name: attest-db
     schema: attest              # co-owner
     migrations: db/migration    # V120.* — anchor_txs + RBF

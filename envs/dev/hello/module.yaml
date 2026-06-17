@@ -12,6 +12,7 @@ spec:
     - { path: /hello/v1, port: 8080, rateLimit: { minute: 60 } }   # rateLimit → KongPlugin 파생
   # events 어휘 제거(G42) — 접속형(connect-to). 발행/구독은 natsUrl 좌표로 런타임에 직접.
   db:
+    target: psql                # G44 — db 방언(필수, 기본값 없음). 이 모듈 SQL = postgres
     name: attest-db             # (kind,name) 공유 그룹(B안) — 같은 name = 한 인스턴스
     schema: attest              # 이 모듈이 소유(migrations 가 생성) — grant 불변식의 owner 마커(G18①)
     migrations: db/migration    # V<weight>.<seq>__*.sql — 모듈별 Flyway Job(G14③)

@@ -11,6 +11,7 @@ spec:
   # image 없음 → Deployment skip(G21). 마이그레이션만 소유.
   dependsOn: []                 # 슬라이스 root(depth 0, wave -100) — ingestion 보다 먼저 migrate
   db:
+    target: psql                # G44 — db 방언(필수, 기본값 없음). 이 모듈 SQL = postgres
     name: attest-db
     schema: attest              # A안: stubs 도 attest 테이블(FK 타겟 exchanges 등) 생성 = co-owner →
                                 #   -schemas=attest,public 로 결정화(옛 주석 "public" 은 의도였으나 실 FK 는 attest 바인딩)
