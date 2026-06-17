@@ -14,13 +14,8 @@ spec:
   routing:
     # manifest /attest/v1/attestations (canonical). methods·legacy alias·jwt-admin 은 어휘 격차(G23).
     - { path: /attest/v1/attestations, port: 3008, auth: jwt, rateLimit: { minute: 60 } }
-  events:
-    publishes:                  # **stream owner**(G25): root 모듈이 공유 stream 을 와일드카드로 1회 선언.
-                                # subject=attest.> → Stream CR 1개가 attest.* 전부 포착(co-publisher 의
-                                # batch.created·anchor.* 포함). batching/anchoring 은 CR 안 만듦(아래 참조).
-                                # ⚠ ArgoCD 단일 App: 동명 Stream CR 중복 금지 → owner 1개만 렌더(G25).
-                                # 이 모듈의 실제 publish = attest.attestation.submitted(런타임; 와일드카드가 포착).
-      - { stream: ANN_BITCERT_ATTEST_EVENTS, subject: "attest.>" }
+  # events 어휘 제거(G42) — 접속형(connect-to). natsUrl 좌표(BITCERT_NATS_URL)로 런타임 publish,
+  # 공유 stream ANN_BITCERT_ATTEST_EVENTS(attest.>)도 앱이 런타임에 소유(get_or_create_stream).
   db:
     name: attest-db             # (kind,name) 공유 그룹 — 셋이 같은 postgres
     schema: attest              # **co-owner 마커**(G24): 단일 owner 아님 — attest 에 테이블 기여

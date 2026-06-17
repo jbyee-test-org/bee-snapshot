@@ -10,9 +10,7 @@ spec:
   dependsOn: [hello]
   routing:
     - { path: /web/v1, port: 8080 }
-  events:
-    consumes:                   # hello 이벤트 구독 → chart 가 NACK durable Consumer 파생
-      - { stream: HELLO, subject: hello.events }
+  # events 어휘 제거(G42) — 접속형(connect-to). 구독은 natsUrl 좌표로 런타임에 직접.
   db:
     name: attest-db
     grants:                     # cross-schema 명시 선언(G14) → chart 가 R__grants.sql 파생
