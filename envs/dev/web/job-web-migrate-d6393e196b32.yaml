@@ -1,13 +1,14 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: web-migrate-c32bc6c492a2
+  name: web-migrate-d6393e196b32
   namespace: bitcert-attest
   labels:
     bee.dev/module: web
-    bee.dev/mighash: c32bc6c492a2
+    bee.dev/mighash: d6393e196b32
   annotations:
     argocd.argoproj.io/sync-wave: '-99'
+    argocd.argoproj.io/sync-options: Replace=true,Force=true
 spec:
   backoffLimit: 6
   template:
@@ -21,6 +22,7 @@ spec:
         - -user=bee
         - -password=bee-demo
         - -connectRetries=30
+        - -schemas=public
         - -table=flyway_history_web
         - -locations=filesystem:/grants
         - -baselineOnMigrate=true

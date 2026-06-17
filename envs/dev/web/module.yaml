@@ -4,13 +4,13 @@ metadata:
 spec:
   product: attest
   chart:
-    version: "0.4.0"            # bee-module pin (G6)
+    version: "0.5.8"            # bee-module pin (G6) — G44 db 코덱(target)
   image:
     name: web
   dependsOn: [hello]
   routing:
     - { path: /web/v1, port: 8080 }
-  # events 어휘 제거(G42) — 접속형(connect-to). 구독은 natsUrl 좌표로 런타임에 직접.
+  # events 어휘 제거(G42) — 접속형(connect-to). 구독은 모듈이 natsUrl 좌표로 런타임에 직접.
   db:
     target: psql                # G44 — db 방언(필수, 기본값 없음). 이 모듈 SQL = postgres
     name: attest-db
