@@ -5,7 +5,7 @@ metadata:
 spec:
   product: attest
   chart:
-    version: "0.5.4"             # bee-module pin (G6) — A안(-schemas 결정화 + Force, finding #6 근본책)
+    version: "0.5.8"             # bee-module pin (G6) — G44 db 코덱(target). (A안 -schemas 결정화+Force, finding #6)
   image:
     name: anchoring            # 실 서비스(workload)
   dependsOn: [batching]         # anchor_txs→batches FK → batching 먼저(depth-wave -98 < batching -99).
