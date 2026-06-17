@@ -1,13 +1,14 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: hello-migrate-136bc95eb717
+  name: hello-migrate-7a42d7403fb1
   namespace: bitcert-attest
   labels:
     bee.dev/module: hello
-    bee.dev/mighash: 136bc95eb717
+    bee.dev/mighash: 7a42d7403fb1
   annotations:
     argocd.argoproj.io/sync-wave: '-100'
+    argocd.argoproj.io/sync-options: Replace=true,Force=true
 spec:
   backoffLimit: 6
   template:
@@ -21,6 +22,7 @@ spec:
         - -user=bee
         - -password=bee-demo
         - -connectRetries=30
+        - -schemas=attest,public
         - -table=flyway_history_hello
         - -locations=filesystem:/sql
         - -baselineOnMigrate=true

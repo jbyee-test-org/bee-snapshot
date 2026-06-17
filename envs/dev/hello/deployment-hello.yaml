@@ -7,6 +7,8 @@ metadata:
     app.kubernetes.io/name: hello
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: hello
@@ -20,3 +22,17 @@ spec:
         image: ghcr.io/jbyee-test-org/bitcert/hello@sha256:1a80c81e82469dc20c82e02f340c526d18f69b96d056ccd9fa77009c8d2e493a
         ports:
         - containerPort: 8080
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: hello-data

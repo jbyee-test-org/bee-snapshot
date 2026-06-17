@@ -4,13 +4,17 @@ metadata:
 spec:
   product: attest               # platform.yaml products[attest].namespace 로 배치
   chart:
-    version: "0.4.0"            # bee-module pin (G6)
+    version: "0.5.8"            # bee-module pin (G6) — G44 db 코덱(target)
   image:
     name: hello                 # repo = <values registry>/hello
   dependsOn: []
+  uses:                           # 리소스 = 논리 참조(G37) → platform `resources` 프로파일을 chart 가 룩업·렌더.
+    compute: small                #   → container.resources(요청/제한). 구체값은 platform/values(규칙 3·4).
+    storage: { profile: persistent, mount: /data }   # → PVC + mount(/data 는 app 지식). class·size 는 platform.
   routing:
     - { path: /hello/v1, port: 8080, rateLimit: { minute: 60 } }   # rateLimit → KongPlugin 파생
-  # events 어휘 제거(G42) — 접속형(connect-to). 발행/구독은 natsUrl 좌표로 런타임에 직접.
+  # events 어휘 제거(G42) — events 는 접속형(connect-to). 발행/구독은 모듈이 natsUrl 좌표로
+  # 런타임에 직접 하고, 계약 표면은 asyncapi(로드맵 `bee contracts`)로. 플랫폼 주입형 아님.
   db:
     target: psql                # G44 — db 방언(필수, 기본값 없음). 이 모듈 SQL = postgres
     name: attest-db             # (kind,name) 공유 그룹(B안) — 같은 name = 한 인스턴스
