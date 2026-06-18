@@ -6,7 +6,7 @@ metadata:
 spec:
   ingressClassName: kong
   rules:
-  - host: web-g53.dev.bitcert.test
+  - host: web.dev.bitcert.test
     http:
       paths:
       - path: /web/v1
